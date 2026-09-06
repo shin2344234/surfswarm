@@ -206,6 +206,8 @@ The default shape is a closed loop: each thread fetches, pauses for a random thi
 
 Both can be combined. Worker starts are also staggered so a closed-loop test does not fire all its threads in lockstep, and the smooth checkbox above the charts applies a three-second moving average when you would rather read the trend than the half-second detail.
 
+![Two agents capped at 20 Mbps each hold a flat 40 Mbps](docs/steady.png)
+
 ## What agents report about their Wi-Fi
 
 Twice a second an agent reads its wireless link (less often on platforms where the read is slow) and sends it along: SSID, BSSID, band, channel and width, signal in dBm, noise where available, and the negotiated rate. Linux uses `iw`, which ships with Raspberry Pi OS. macOS uses `wdutil`, which needs root and is why the daemon runs as root; recent macOS versions hide the SSID and BSSID from processes without location access, so a Mac may report signal, channel, and rate without the network name, and without root it falls back to the slower `system_profiler`. Windows uses `netsh`, which reports signal as a percentage that is converted to an approximate dBm. A wired device simply shows no link. `surfswarm-agent wifi` prints exactly what a device would report and how long the read took, which is the first thing to run when the Wi-Fi column looks wrong.

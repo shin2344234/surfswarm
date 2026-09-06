@@ -36,6 +36,9 @@ var downloadURLList string
 //go:embed data/max_urls.txt
 var maxURLList string
 
+// faviconSVG is a small swarm mark so browser tabs are identifiable.
+const faviconSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#0f1419"/><circle cx="10" cy="11" r="3.2" fill="#3fb950"/><circle cx="21" cy="9" r="2.6" fill="#3fb950"/><circle cx="16" cy="19" r="3.6" fill="#3fb950"/><circle cx="24" cy="22" r="2.4" fill="#58a6ff"/><circle cx="8" cy="23" r="2.4" fill="#58a6ff"/></svg>`
+
 // Config holds server settings.
 type Config struct {
 	// Token, when set, must be presented by agents as a bearer token.
@@ -143,6 +146,13 @@ func (s *Server) Handler() http.Handler {
 	}
 	mux.HandleFunc("GET /{$}", page(indexHTML))
 	mux.HandleFunc("GET /lists", page(listsHTML))
+	favicon := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/svg+xml")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		_, _ = w.Write([]byte(faviconSVG))
+	}
+	mux.HandleFunc("GET /favicon.ico", favicon)
+	mux.HandleFunc("GET /favicon.svg", favicon)
 	mux.HandleFunc("GET /agent", s.handleAgent)
 	mux.HandleFunc("GET /api/events", s.handleEvents)
 	mux.HandleFunc("GET /api/agents", func(w http.ResponseWriter, r *http.Request) {
