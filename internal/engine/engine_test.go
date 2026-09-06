@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"surfswarm/internal/protocol"
+	"github.com/shin2344234/surfswarm/internal/protocol"
 )
 
 func TestClassify(t *testing.T) {

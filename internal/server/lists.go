@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"surfswarm/internal/engine"
+	"github.com/shin2344234/surfswarm/internal/engine"
 )
 
 // listNameRe limits list names to something safe for a file name and a URL.

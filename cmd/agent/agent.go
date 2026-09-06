@@ -13,9 +13,9 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"surfswarm/internal/engine"
-	"surfswarm/internal/protocol"
-	"surfswarm/internal/wifi"
+	"github.com/shin2344234/surfswarm/internal/engine"
+	"github.com/shin2344234/surfswarm/internal/protocol"
+	"github.com/shin2344234/surfswarm/internal/wifi"
 )
 
 // outboxSize bounds frames kept while the server is unreachable: at two

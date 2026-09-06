@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	"surfswarm/internal/server"
+	"github.com/shin2344234/surfswarm/internal/server"
 )
 
 var version = "dev"

@@ -3,7 +3,7 @@ package wifi
 import (
 	"os"
 
-	"surfswarm/internal/protocol"
+	"github.com/shin2344234/surfswarm/internal/protocol"
 )
 
 // current uses iw, which ships with Raspberry Pi OS and most distributions.

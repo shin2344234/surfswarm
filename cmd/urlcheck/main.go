@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"surfswarm/internal/engine"
+	"github.com/shin2344234/surfswarm/internal/engine"
 )
 
 func main() {

@@ -1,6 +1,6 @@
 package wifi
 
-import "surfswarm/internal/protocol"
+import "github.com/shin2344234/surfswarm/internal/protocol"
 
 // current prefers wdutil, which reports signal, channel, and rate for any
 // caller and the SSID and BSSID only for root with location access; the

@@ -18,7 +18,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"surfswarm/internal/protocol"
+	"github.com/shin2344234/surfswarm/internal/protocol"
 )
 
 //go:embed static/index.html

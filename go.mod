@@ -1,4 +1,4 @@
-module surfswarm
+module github.com/shin2344234/surfswarm
 
 go 1.25.0
 

@@ -23,7 +23,7 @@ import (
 
 	"github.com/kardianos/service"
 
-	"surfswarm/internal/wifi"
+	"github.com/shin2344234/surfswarm/internal/wifi"
 )
 
 var version = "dev"

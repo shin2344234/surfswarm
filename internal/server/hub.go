@@ -8,7 +8,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"surfswarm/internal/protocol"
+	"github.com/shin2344234/surfswarm/internal/protocol"
 )
 
 // AgentConn is one live websocket to an agent. Writes go through a single

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"surfswarm/internal/protocol"
+	"github.com/shin2344234/surfswarm/internal/protocol"
 )
 
 // Current returns the active wireless link, or nil when the device has no

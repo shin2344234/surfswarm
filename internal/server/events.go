@@ -7,7 +7,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"surfswarm/internal/protocol"
+	"github.com/shin2344234/surfswarm/internal/protocol"
 )
 
 // uiConn is one browser tab subscribed to live events.

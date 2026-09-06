@@ -1,6 +1,6 @@
 package wifi
 
-import "surfswarm/internal/protocol"
+import "github.com/shin2344234/surfswarm/internal/protocol"
 
 // current uses "netsh wlan show interfaces", which works for any user.
 func current() (*protocol.WifiInfo, error) {
