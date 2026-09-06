@@ -29,21 +29,24 @@ var ErrTestNotFound = errors.New("test not found")
 // "mixed". Zero Threads, DurationS or TimeoutMs take defaults; think times
 // are used as given.
 type CreateTestRequest struct {
-	AgentIDs   []string `json:"agent_ids"`
-	Mode       string   `json:"mode"`
-	URLList    string   `json:"url_list"`
-	Threads    int      `json:"threads"`
-	DurationS  int      `json:"duration_s"`
-	ThinkMinMs int      `json:"think_min_ms"`
-	ThinkMaxMs int      `json:"think_max_ms"`
-	TimeoutMs  int      `json:"timeout_ms"`
+	AgentIDs       []string `json:"agent_ids"`
+	Mode           string   `json:"mode"`
+	URLList        string   `json:"url_list"`
+	Threads        int      `json:"threads"`
+	DurationS      int      `json:"duration_s"`
+	ThinkMinMs     int      `json:"think_min_ms"`
+	ThinkMaxMs     int      `json:"think_max_ms"`
+	TimeoutMs      int      `json:"timeout_ms"`
+	RequestsPerSec float64  `json:"requests_per_sec"`
+	RateMbps       float64  `json:"rate_mbps"`
 }
 
-// Tick is one second of aggregate results across all agents in a test.
-// Requests, Bytes and Errors are cumulative. Mbps and ReqPerSec sum what
-// each active agent reported for its last interval; ErrPerSec comes from
-// the change in cumulative errors since the previous tick; P50Ms and P95Ms
-// are the agents' interval percentiles weighted by their request counts.
+// Tick is one report interval of aggregate results across all agents in a
+// test. Requests, Bytes and Errors are cumulative. Mbps and ReqPerSec sum
+// what each active agent reported for its last interval, normalized to
+// per-second rates; ErrPerSec comes from the change in cumulative errors
+// since the previous tick; P50Ms and P95Ms are the agents' interval
+// percentiles weighted by their request counts.
 type Tick struct {
 	TS           int64   `json:"ts"`
 	Mbps         float64 `json:"mbps"`
@@ -58,8 +61,9 @@ type Tick struct {
 	ActiveAgents int     `json:"active_agents"`
 }
 
-// maxHistory caps per-second history kept in memory, per test and per agent.
-const maxHistory = 7200
+// maxHistory caps the report history kept in memory, per test and per
+// agent: two hours at two reports a second.
+const maxHistory = 14400
 
 // AgentEvent notes something that happened to one agent during a test: a
 // roam to another BSSID, Wi-Fi dropping or returning, or the control
@@ -209,14 +213,19 @@ func (tm *TestManager) Start(req CreateTestRequest) (Test, error) {
 		agents[id] = &AgentResult{AgentID: id, Name: st.Name}
 	}
 
+	if req.RequestsPerSec < 0 || req.RateMbps < 0 {
+		return Test{}, errors.New("requests_per_sec and rate_mbps must be zero or positive")
+	}
 	spec := protocol.TestSpec{
-		ID:         newID(),
-		Mode:       req.Mode,
-		Threads:    req.Threads,
-		DurationS:  req.DurationS,
-		ThinkMinMs: req.ThinkMinMs,
-		ThinkMaxMs: req.ThinkMaxMs,
-		TimeoutMs:  req.TimeoutMs,
+		ID:             newID(),
+		Mode:           req.Mode,
+		Threads:        req.Threads,
+		DurationS:      req.DurationS,
+		ThinkMinMs:     req.ThinkMinMs,
+		ThinkMaxMs:     req.ThinkMaxMs,
+		TimeoutMs:      req.TimeoutMs,
+		RequestsPerSec: req.RequestsPerSec,
+		RateMbps:       req.RateMbps,
 	}
 	if spec.Threads <= 0 {
 		spec.Threads = 4
@@ -267,8 +276,8 @@ func (tm *TestManager) Start(req CreateTestRequest) (Test, error) {
 	tm.current = t
 	tm.mu.Unlock()
 
-	log.Printf("test %s: started on %d agent(s), threads=%d duration=%ds think=%d-%dms list=%s urls=%d",
-		t.ID, len(ids), spec.Threads, spec.DurationS, spec.ThinkMinMs, spec.ThinkMaxMs, listName, len(urls))
+	log.Printf("test %s: started on %d agent(s), threads=%d duration=%ds think=%d-%dms rps=%g rate=%gMbps list=%s urls=%d",
+		t.ID, len(ids), spec.Threads, spec.DurationS, spec.ThinkMinMs, spec.ThinkMaxMs, spec.RequestsPerSec, spec.RateMbps, listName, len(urls))
 	go tm.tickLoop(t)
 
 	snap, _ := tm.Snapshot(t.ID)
@@ -473,8 +482,12 @@ func computeTick(t *Test, now time.Time) (Tick, bool) {
 		}
 		allDone = false
 		if now.UnixMilli()-ar.Latest.TS <= 3000 {
+			secs := float64(ar.Latest.IntervalMs) / 1000
+			if secs <= 0 {
+				secs = 1 // older agents reported once a second without saying so
+			}
 			tick.Mbps += ar.Latest.Mbps
-			tick.ReqPerSec += float64(ar.Latest.IntervalRequests)
+			tick.ReqPerSec += float64(ar.Latest.IntervalRequests) / secs
 			tick.Workers += ar.Latest.ActiveWorkers
 			tick.ActiveAgents++
 			if n := ar.Latest.IntervalRequests; n > 0 {
@@ -497,9 +510,9 @@ func computeTick(t *Test, now time.Time) (Tick, bool) {
 	return tick, allDone
 }
 
-// tickLoop aggregates once per second until the test finishes.
+// tickLoop aggregates every report interval until the test finishes.
 func (tm *TestManager) tickLoop(t *Test) {
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(protocol.ReportInterval)
 	defer ticker.Stop()
 	for now := range ticker.C {
 		tm.mu.Lock()

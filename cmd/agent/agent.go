@@ -18,9 +18,13 @@ import (
 	"surfswarm/internal/wifi"
 )
 
-// outboxSize bounds frames kept while the server is unreachable: at one
-// progress report a second that is twenty minutes of a running test.
-const outboxSize = 1200
+// outboxSize bounds frames kept while the server is unreachable: at two
+// progress reports a second that is twenty minutes of a running test.
+const outboxSize = 2400
+
+// wifiPollInterval is how often the wireless link is re-read when the
+// platform tool is quick; slow tools stretch it (see pollWifi).
+const wifiPollInterval = 500 * time.Millisecond
 
 // agent owns the connection to the server and the test that may be running.
 // A test's lifetime is independent of the connection: the control channel
@@ -84,10 +88,10 @@ func (a *agent) runForever(ctx context.Context) {
 	}
 }
 
-// pollWifi refreshes the wireless link reading every few seconds. When the
-// platform tool is slow (system_profiler on macOS can take several
-// seconds), the interval stretches so the agent is not running it
-// back to back.
+// pollWifi refreshes the wireless link reading twice a second when the
+// platform tool is quick (iw and netsh are). When it is slow, as
+// system_profiler on macOS is, the interval stretches to four times the
+// read so the agent is not running it back to back.
 func (a *agent) pollWifi(ctx context.Context) {
 	warned := false
 	for {
@@ -101,8 +105,8 @@ func (a *agent) pollWifi(ctx context.Context) {
 		a.wifiMu.Lock()
 		a.wifi = w
 		a.wifiMu.Unlock()
-		wait := 5 * time.Second
-		if took > time.Second {
+		wait := wifiPollInterval
+		if took > 200*time.Millisecond {
 			wait = 4 * took
 			if wait > time.Minute {
 				wait = time.Minute

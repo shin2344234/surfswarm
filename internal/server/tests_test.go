@@ -106,6 +106,13 @@ func TestComputeTick(t *testing.T) {
 		t.Fatalf("err/s from delta 1 -> 3 over ~1s: %v", tick.ErrPerSec)
 	}
 
+	// Half-second intervals are normalized to per-second rates.
+	tt.Agents["fast"].Latest.IntervalMs = 500
+	tt.Agents["slow"].Latest.IntervalMs = 500
+	if tick, _ := computeTick(tt, now); tick.ReqPerSec != 16 {
+		t.Fatalf("req/s with 500 ms intervals: %v", tick.ReqPerSec)
+	}
+
 	for _, ar := range tt.Agents {
 		ar.Done = true
 	}

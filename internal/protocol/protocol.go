@@ -3,10 +3,17 @@
 // type-specific payload.
 package protocol
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Version is bumped whenever a message shape changes incompatibly.
 const Version = 1
+
+// ReportInterval is how often an agent sends Progress during a test and
+// how often the server aggregates it.
+const ReportInterval = 500 * time.Millisecond
 
 // Agent to server.
 const (
@@ -94,16 +101,25 @@ type Heartbeat struct {
 }
 
 // TestSpec is everything an agent needs to run a test.
+//
+// Load shape: by default each of Threads workers fetches, pauses for a
+// random think time, and repeats (closed loop). RequestsPerSec, when set,
+// switches to an open loop that starts a request on a fixed cadence
+// regardless of think time, using up to Threads at once. RateMbps, when
+// set, caps the agent's download throughput with a token bucket so big
+// files stream at a steady rate instead of as fast as the link allows.
 type TestSpec struct {
-	ID         string   `json:"id"`
-	Mode       string   `json:"mode"` // "get" in the spike; "page" and "bulk" later
-	Threads    int      `json:"threads"`
-	DurationS  int      `json:"duration_s"` // 0 means run until stopped
-	ThinkMinMs int      `json:"think_min_ms"`
-	ThinkMaxMs int      `json:"think_max_ms"`
-	TimeoutMs  int      `json:"timeout_ms"`
-	UserAgent  string   `json:"user_agent,omitempty"`
-	URLs       []string `json:"urls,omitempty"`
+	ID             string   `json:"id"`
+	Mode           string   `json:"mode"` // "get" in the spike; "page" and "bulk" later
+	Threads        int      `json:"threads"`
+	DurationS      int      `json:"duration_s"` // 0 means run until stopped
+	ThinkMinMs     int      `json:"think_min_ms"`
+	ThinkMaxMs     int      `json:"think_max_ms"`
+	TimeoutMs      int      `json:"timeout_ms"`
+	RequestsPerSec float64  `json:"requests_per_sec,omitempty"`
+	RateMbps       float64  `json:"rate_mbps,omitempty"`
+	UserAgent      string   `json:"user_agent,omitempty"`
+	URLs           []string `json:"urls,omitempty"`
 }
 
 // StartTest tells an agent to begin a test.
@@ -126,10 +142,11 @@ type RequestError struct {
 	Message string  `json:"message,omitempty"`
 }
 
-// Progress is sent once per second while a test runs, and once more with
-// Done set when it finishes. Requests, Bytes and Errors are cumulative;
-// the Interval fields and Mbps cover the last reporting interval only.
-// NewErrors lists the failures recorded since the previous report.
+// Progress is sent every ReportInterval while a test runs, and once more
+// with Done set when it finishes. Requests, Bytes and Errors are
+// cumulative; the Interval fields and Mbps cover the last reporting
+// interval only, whose length is IntervalMs. NewErrors lists the failures
+// recorded since the previous report.
 type Progress struct {
 	TestID           string  `json:"test_id"`
 	TS               int64   `json:"ts"`
@@ -137,13 +154,17 @@ type Progress struct {
 	Requests         int64   `json:"requests"`
 	Bytes            int64   `json:"bytes"`
 	Errors           int64   `json:"errors"`
+	IntervalMs       int64   `json:"interval_ms"`
 	IntervalRequests int64   `json:"interval_requests"`
 	IntervalBytes    int64   `json:"interval_bytes"`
 	Mbps             float64 `json:"mbps"`
 	ActiveWorkers    int     `json:"active_workers"`
 	P50Ms            float64 `json:"p50_ms"`
 	P95Ms            float64 `json:"p95_ms"`
-	Done             bool    `json:"done"`
+	// Skipped counts open-loop dispatches that found every worker busy,
+	// meaning the requested rate was higher than the device could sustain.
+	Skipped int64 `json:"skipped,omitempty"`
+	Done    bool  `json:"done"`
 
 	NewErrors []RequestError `json:"new_errors,omitempty"`
 	Wifi      *WifiInfo      `json:"wifi,omitempty"`

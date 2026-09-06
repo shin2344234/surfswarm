@@ -113,6 +113,8 @@
       <label title="Think time is the pause a thread takes between one request and the next, like a person reading a page before clicking again. Each pause is a random length between min and max. Zero on both means no pause: a throughput test.">Think min (ms)<input name="think_min_ms" type="number" value="1000" min="0"></label>
       <label title="Upper end of the random pause between requests. Set both min and max to zero for a throughput test.">Think max (ms)<input name="think_max_ms" type="number" value="5000" min="0"></label>
       <label title="A request is abandoned and counted as a timeout when no bytes have arrived for this long. Large downloads keep going as long as data flows.">Stall timeout (ms)<input name="timeout_ms" type="number" value="15000" min="1000"></label>
+      <label title="Steady load, option 1: cap each agent's download throughput. Workers are paced with a token bucket so big files stream at this rate instead of as fast as the link allows. With the download or max list, 16 agents at 20 Mbps is a flat 320 Mbps. 0 = unlimited.">Target Mbps per agent<input name="rate_mbps" type="number" value="0" min="0" step="0.5"></label>
+      <label title="Steady load, option 2: start a request on a fixed cadence instead of waiting on think time (open loop). Uses up to the thread count at once; if all threads are busy the slot is skipped and counted. 0 = closed loop with think time.">Requests/s per agent<input name="requests_per_sec" type="number" value="0" min="0" step="0.5"></label>
       <div class="actions">
         <button type="submit" id="start">Start</button>
         <button type="button" class="stop" id="stop" disabled>Stop</button>
@@ -162,8 +164,23 @@
   };
 
   // overlay adds one line per device to the all-agents charts; off by default
-  // so the combined view reads as a single aggregate number.
-  const state = { agents: [], test: null, view: 'all', overlay: false, selected: new Set() };
+  // so the combined view reads as a single aggregate number. smooth applies
+  // a short moving average to the traffic charts.
+  const state = { agents: [], test: null, view: 'all', overlay: false, smooth: false, selected: new Set() };
+
+  // Moving average over the last `win` samples, for reading trends through
+  // half-second data. Timestamps are kept; the series just gets calmer.
+  function smoothPts(pts, win = 6) {
+    if (!state.smooth || pts.length < 3) return pts;
+    const out = [];
+    let sum = 0;
+    for (let i = 0; i < pts.length; i++) {
+      sum += pts[i][1];
+      if (i >= win) sum -= pts[i - win][1];
+      out.push([pts[i][0], sum / Math.min(i + 1, win)]);
+    }
+    return out;
+  }
 
   // ---- helpers ----
   function ago(iso) {
@@ -369,7 +386,8 @@
     $('#test-title').innerHTML =
       ' <span class="pill ' + esc(t.status) + '">' + esc(t.status) + '</span> ' +
       'test ' + esc(t.id) + ': ' + s.threads + ' threads x ' + Object.keys(t.agents).length + ' agents, ' +
-      s.duration_s + 's, think ' + s.think_min_ms + '-' + s.think_max_ms + ' ms, stall ' + s.timeout_ms + ' ms, ' +
+      s.duration_s + 's, ' + (s.requests_per_sec ? s.requests_per_sec + ' req/s per agent' : 'think ' + s.think_min_ms + '-' + s.think_max_ms + ' ms') +
+      (s.rate_mbps ? ', ' + s.rate_mbps + ' Mbps cap per agent' : '') + ', stall ' + s.timeout_ms + ' ms, ' +
       esc(t.url_list || 'browse') + ' list (' + t.url_count + ' URLs)';
     renderViews();
     renderStats();
@@ -408,20 +426,24 @@
     };
     mk('All agents', 'all', ACCENT);
     sortedAgents().forEach((a, i) => mk(a.name, a.agent_id, agentColor(i)));
+    const sp = document.createElement('span'); sp.className = 'spacer'; box.appendChild(sp);
     if (state.view === 'all' && sortedAgents().length > 1) {
-      const sp = document.createElement('span'); sp.className = 'spacer'; box.appendChild(sp);
       const lab = document.createElement('label'); lab.className = 'inline';
       lab.innerHTML = '<input type="checkbox"' + (state.overlay ? ' checked' : '') + '> also show one line per device';
       lab.querySelector('input').addEventListener('change', (e) => { state.overlay = e.target.checked; render(); });
       box.appendChild(lab);
     }
+    const sm = document.createElement('label'); sm.className = 'inline';
+    sm.innerHTML = '<input type="checkbox"' + (state.smooth ? ' checked' : '') + '> smooth (3 s average)';
+    sm.querySelector('input').addEventListener('change', (e) => { state.smooth = e.target.checked; render(); });
+    box.appendChild(sm);
   }
 
-  // recentLatency averages the last few non-empty one-second percentiles so
-  // the tiles do not flicker to zero in seconds where no request finished.
+  // recentLatency averages the last few non-empty interval percentiles so
+  // the tiles do not flicker to zero in intervals where no request finished.
   function recentLatency(points, key50, key95) {
     let n = 0, s50 = 0, s95 = 0;
-    for (let i = points.length - 1; i >= 0 && n < 10; i--) {
+    for (let i = points.length - 1; i >= 0 && n < 20; i--) {
       const p = points[i];
       if (!p[key50] && !p[key95]) continue;
       s50 += p[key50] || 0; s95 += p[key95] || 0; n++;
@@ -466,9 +488,11 @@
       [w.signal_dbm ? w.signal_dbm + ' dBm' : 'n/a', 'Signal' + (w.band ? ', ' + w.band + ' GHz ch ' + w.channel : '')],
       [w.tx_mbps ? fmt(w.tx_mbps) : 'n/a', 'Link Mbps' + (w.ssid ? ', ' + w.ssid : '')],
     ] : [['wired', 'No Wi-Fi link reported']];
+    if (p.skipped) extra.push([fmt(p.skipped), 'Skipped dispatches (rate too high for this device)']);
+    const intervalS = (p.interval_ms || 1000) / 1000;
     return {
       now: a.done ? 0 : p.mbps, avg: a.done ? p.mbps : (elapsed ? (p.bytes || 0) * 8 / 1e6 / elapsed : 0),
-      rps: a.done ? 0 : p.interval_requests, requests: p.requests, bytes: p.bytes, errors: p.errors,
+      rps: a.done ? 0 : (p.interval_requests || 0) / intervalS, requests: p.requests, bytes: p.bytes, errors: p.errors,
       p50, p95, workers: a.done ? 0 : p.active_workers, elapsed,
       label: 'State', labelValue: a.done ? 'done' : (p.ts ? 'running' : 'waiting'), extra,
     };
@@ -532,10 +556,11 @@
 
   function renderCharts() {
     const v = viewSeries();
-    drawChart($('#c-mbps'), 'Throughput, Mbps', v.mbps, v.t0, v.t1, 'Mbps');
-    drawChart($('#c-req'), 'Requests per second', v.req, v.t0, v.t1, 'req/s');
-    drawChart($('#c-lat'), 'Request time, ms', v.lat, v.t0, v.t1, 'ms');
-    drawChart($('#c-err'), 'Errors per second', v.err, v.t0, v.t1, '/s');
+    const sm = (series) => series.map((s) => ({ ...s, pts: smoothPts(s.pts) }));
+    drawChart($('#c-mbps'), 'Throughput, Mbps', sm(v.mbps), v.t0, v.t1, 'Mbps');
+    drawChart($('#c-req'), 'Requests per second', sm(v.req), v.t0, v.t1, 'req/s');
+    drawChart($('#c-lat'), 'Request time, ms', sm(v.lat), v.t0, v.t1, 'ms');
+    drawChart($('#c-err'), 'Errors per second', sm(v.err), v.t0, v.t1, '/s');
     drawChart($('#c-sig'), 'Wi-Fi signal, dBm', wifiSeries('signal_dbm'), v.t0, v.t1, 'dBm', false);
     drawChart($('#c-rate'), 'Wi-Fi link rate, Mbps', wifiSeries('tx_mbps'), v.t0, v.t1, 'Mbps');
   }
@@ -579,7 +604,7 @@
         '<td><span class="swatch" style="background:' + agentColor(i) + '"></span>' + esc(r.name) + '</td>' +
         '<td class="num">' + fmt(r.done ? 0 : p.mbps, 1) + '</td>' +
         '<td class="num">' + fmt(avg, 1) + '</td>' +
-        '<td class="num">' + fmt(r.done ? 0 : p.interval_requests, 1) + '</td>' +
+        '<td class="num">' + fmt(r.done ? 0 : (p.interval_requests || 0) / ((p.interval_ms || 1000) / 1000), 1) + '</td>' +
         '<td class="num">' + fmt(p.requests) + '</td>' +
         '<td class="num">' + fmt((p.bytes || 0) / 1e6, 1) + '</td>' +
         '<td class="num' + (p.errors ? ' bad' : '') + '">' + fmt(p.errors) + '</td>' +
@@ -840,7 +865,7 @@
     e.preventDefault();
     const f = new FormData(e.target);
     const body = { mode: 'get', url_list: f.get('url_list'), agent_ids: [...state.selected] };
-    for (const k of ['threads', 'duration_s', 'think_min_ms', 'think_max_ms', 'timeout_ms']) body[k] = Number(f.get(k));
+    for (const k of ['threads', 'duration_s', 'think_min_ms', 'think_max_ms', 'timeout_ms', 'rate_mbps', 'requests_per_sec']) body[k] = Number(f.get(k));
     $('#form-msg').textContent = 'Starting';
     try {
       const t = await api('POST', '/api/tests', body);

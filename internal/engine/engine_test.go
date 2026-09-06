@@ -177,6 +177,43 @@ func TestRunStopsWhenCancelled(t *testing.T) {
 	}
 }
 
+func TestRateLimitHoldsThroughput(t *testing.T) {
+	big := strings.Repeat("y", 512<<10) // 512 KB
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "524288")
+		_, _ = w.Write([]byte(big))
+	}))
+	defer srv.Close()
+	// 8 Mbps is 1 MB/s; over two seconds with two workers expect about 2 MB,
+	// give or take the initial burst.
+	spec := protocol.TestSpec{ID: "rl", Threads: 2, DurationS: 2, RateMbps: 8, TimeoutMs: 10000, URLs: []string{srv.URL}}
+	done := New(spec).Run(context.Background(), func(protocol.Progress) {})
+	mb := float64(done.Summary.Bytes) / 1e6
+	if mb < 1.5 || mb > 3.0 {
+		t.Fatalf("rate limit: moved %.2f MB in 2 s at 8 Mbps", mb)
+	}
+}
+
+func TestOpenLoopCadence(t *testing.T) {
+	srv := newTestServer(t)
+	spec := protocol.TestSpec{ID: "ol", Threads: 4, DurationS: 2, RequestsPerSec: 10, ThinkMinMs: 5000, ThinkMaxMs: 5000, TimeoutMs: 5000, URLs: []string{srv.URL + "/ok"}}
+	done := New(spec).Run(context.Background(), func(protocol.Progress) {})
+	// Think time is ignored in open loop, so this is about 20 requests, not the
+	// one or two a 5 s think time would allow.
+	if done.Summary.Requests < 14 || done.Summary.Requests > 26 {
+		t.Fatalf("open loop at 10 req/s for 2 s made %d requests", done.Summary.Requests)
+	}
+	if done.Summary.Skipped != 0 {
+		t.Fatalf("no dispatches should be skipped with idle workers, got %d", done.Summary.Skipped)
+	}
+	// One worker that cannot keep up must report skipped slots.
+	slow := protocol.TestSpec{ID: "ol2", Threads: 1, DurationS: 1, RequestsPerSec: 50, TimeoutMs: 5000, URLs: []string{srv.URL + "/stall"}}
+	done = New(slow).Run(context.Background(), func(protocol.Progress) {})
+	if done.Summary.Skipped == 0 {
+		t.Fatal("expected skipped dispatches when the only worker is stuck")
+	}
+}
+
 func TestCheckURL(t *testing.T) {
 	srv := newTestServer(t)
 	client := &http.Client{Transport: NewTransport(2)}

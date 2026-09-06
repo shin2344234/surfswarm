@@ -22,6 +22,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/time/rate"
+
 	"surfswarm/internal/protocol"
 )
 
@@ -38,13 +40,15 @@ const maxPendingErrors = 200
 
 // Engine runs one test.
 type Engine struct {
-	spec   protocol.TestSpec
-	client *http.Client
+	spec    protocol.TestSpec
+	client  *http.Client
+	limiter *rate.Limiter // nil when RateMbps is 0
 
 	requests atomic.Int64
 	bytes    atomic.Int64
 	errors   atomic.Int64
 	winBytes atomic.Int64
+	skipped  atomic.Int64
 	active   atomic.Int32
 
 	mu          sync.Mutex
@@ -72,11 +76,23 @@ func New(spec protocol.TestSpec) *Engine {
 	if spec.UserAgent == "" {
 		spec.UserAgent = DefaultUserAgent
 	}
-	return &Engine{
+	e := &Engine{
 		spec:       spec,
 		client:     &http.Client{Transport: NewTransport(spec.Threads)},
 		errClasses: map[string]int64{},
 	}
+	if spec.RateMbps > 0 {
+		bytesPerSec := spec.RateMbps * 1e6 / 8
+		// The burst must cover one read (io.Copy uses 32 KB buffers) and
+		// is otherwise a quarter second of allowance, so the rate holds
+		// steady at the reporting resolution.
+		burst := int(bytesPerSec / 4)
+		if burst < 64<<10 {
+			burst = 64 << 10
+		}
+		e.limiter = rate.NewLimiter(rate.Limit(bytesPerSec), burst)
+	}
+	return e
 }
 
 // NewTransport returns the transport the agent uses, sized for n workers.
@@ -113,8 +129,8 @@ func SetBrowserHeaders(req *http.Request, userAgent string) {
 	req.Header.Set("Pragma", "no-cache")
 }
 
-// Run executes the test, calling report once per second and once more with
-// Done set. It returns when every worker has exited.
+// Run executes the test, calling report every protocol.ReportInterval and
+// once more with Done set. It returns when every worker has exited.
 func (e *Engine) Run(ctx context.Context, report func(protocol.Progress)) protocol.TestDone {
 	start := time.Now()
 	var cancel context.CancelFunc
@@ -125,13 +141,41 @@ func (e *Engine) Run(ctx context.Context, report func(protocol.Progress)) protoc
 	}
 	defer cancel()
 
+	// Open loop: a dispatcher hands out slots on a fixed cadence and workers
+	// take them; think time is ignored. Closed loop: each worker runs its
+	// own fetch/think cycle, with starts staggered so they do not fire in
+	// lockstep.
+	var sched chan struct{}
+	if e.spec.RequestsPerSec > 0 {
+		sched = make(chan struct{}, e.spec.Threads)
+		go e.dispatch(ctx, sched)
+	}
 	var wg sync.WaitGroup
 	for i := 0; i < e.spec.Threads; i++ {
 		wg.Add(1)
 		seed := time.Now().UnixNano() + int64(i)*7919
+		stagger := time.Duration(0)
+		if sched == nil {
+			cycle := time.Duration(e.spec.ThinkMinMs+e.spec.ThinkMaxMs) / 2 * time.Millisecond
+			if cycle > 2*time.Second {
+				cycle = 2 * time.Second
+			}
+			stagger = cycle * time.Duration(i) / time.Duration(e.spec.Threads)
+		}
 		go func() {
 			defer wg.Done()
-			e.worker(ctx, rand.New(rand.NewSource(seed)))
+			if stagger > 0 {
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(stagger):
+				}
+			}
+			if sched != nil {
+				e.pacedWorker(ctx, sched, rand.New(rand.NewSource(seed)))
+			} else {
+				e.worker(ctx, rand.New(rand.NewSource(seed)))
+			}
 		}()
 	}
 	done := make(chan struct{})
@@ -140,7 +184,7 @@ func (e *Engine) Run(ctx context.Context, report func(protocol.Progress)) protoc
 		close(done)
 	}()
 
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(protocol.ReportInterval)
 	defer ticker.Stop()
 	last := start
 	for {
@@ -164,6 +208,46 @@ func (e *Engine) Run(ctx context.Context, report func(protocol.Progress)) protoc
 			e.mu.Unlock()
 			report(final)
 			return protocol.TestDone{TestID: e.spec.ID, Summary: final, ErrorsByClass: classes}
+		}
+	}
+}
+
+// dispatch releases one slot per 1/RequestsPerSec seconds. A slot nobody is
+// free to take is dropped and counted, which shows up as Skipped.
+func (e *Engine) dispatch(ctx context.Context, sched chan<- struct{}) {
+	interval := time.Duration(float64(time.Second) / e.spec.RequestsPerSec)
+	if interval < time.Millisecond {
+		interval = time.Millisecond
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			select {
+			case sched <- struct{}{}:
+			default:
+				e.skipped.Add(1)
+			}
+		}
+	}
+}
+
+// pacedWorker waits for a dispatch slot, fetches once, and repeats.
+func (e *Engine) pacedWorker(ctx context.Context, sched <-chan struct{}, rng *rand.Rand) {
+	if len(e.spec.URLs) == 0 {
+		return
+	}
+	e.active.Add(1)
+	defer e.active.Add(-1)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-sched:
+			e.fetch(ctx, e.spec.URLs[rng.Intn(len(e.spec.URLs))])
 		}
 	}
 }
@@ -235,7 +319,7 @@ func (e *Engine) fetch(ctx context.Context, target string) {
 		e.record(start, target, 0, Classify(err), errMessage(err))
 		return
 	}
-	_, rerr := io.Copy(io.Discard, &countingReader{r: resp.Body, e: e, timer: timer, stall: stall})
+	_, rerr := io.Copy(io.Discard, &countingReader{r: resp.Body, e: e, ctx: rctx, timer: timer, stall: stall})
 	resp.Body.Close()
 	if ctx.Err() != nil {
 		return
@@ -327,33 +411,45 @@ func (e *Engine) snapshot(start, now time.Time, interval time.Duration, final bo
 		Requests:         e.requests.Load(),
 		Bytes:            e.bytes.Load(),
 		Errors:           e.errors.Load(),
+		IntervalMs:       interval.Milliseconds(),
 		IntervalRequests: reqs,
 		IntervalBytes:    bytes,
 		Mbps:             float64(bytes) * 8 / 1e6 / secs,
 		ActiveWorkers:    int(e.active.Load()),
 		P50Ms:            p50,
 		P95Ms:            p95,
+		Skipped:          e.skipped.Load(),
 		Done:             final,
 		NewErrors:        pending,
 	}
 }
 
 // countingReader adds body bytes to the counters as they arrive, so a large
-// download shows up on the throughput chart while it is in flight, and pushes
-// the stall timer back every time data lands.
+// download shows up on the throughput chart while it is in flight, pushes
+// the stall timer back every time data lands, and holds reads to the
+// agent's rate limit when one is set.
 type countingReader struct {
 	r     io.Reader
 	e     *Engine
+	ctx   context.Context
 	timer *time.Timer
 	stall time.Duration
 }
 
 func (c *countingReader) Read(p []byte) (int, error) {
+	if lim := c.e.limiter; lim != nil && len(p) > lim.Burst() {
+		p = p[:lim.Burst()]
+	}
 	n, err := c.r.Read(p)
 	if n > 0 {
 		c.e.bytes.Add(int64(n))
 		c.e.winBytes.Add(int64(n))
 		c.timer.Reset(c.stall)
+		if lim := c.e.limiter; lim != nil {
+			if werr := lim.WaitN(c.ctx, n); werr != nil && err == nil {
+				err = werr
+			}
+		}
 	}
 	return n, err
 }

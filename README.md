@@ -161,7 +161,7 @@ DELETE /api/lists/{name}    reset a bundled list to its shipped version, or dele
 POST /api/lists/{name}/check  start checking every URL in a list; GET the same path for progress and results
 ```
 
-`agent_ids` in the create body restricts a test to specific agents; leave it out for all online agents. `url_list` is `browse` (default), `download`, `max`, `mixed`, or the name of any custom list. `timeout_ms` is a stall timeout: a request is abandoned when no bytes have arrived for that long, so big downloads on slow links are fine as long as data keeps flowing.
+`agent_ids` in the create body restricts a test to specific agents; leave it out for all online agents. `url_list` is `browse` (default), `download`, `max`, `mixed`, or the name of any custom list. `rate_mbps` caps each agent's download rate and `requests_per_sec` switches to a fixed request cadence; see Steady load below. `timeout_ms` is a stall timeout: a request is abandoned when no bytes have arrived for that long, so big downloads on slow links are fine as long as data keeps flowing.
 
 ## URL lists
 
@@ -197,21 +197,30 @@ go run ./cmd/urlcheck -file internal/server/data/download_urls.txt -max-bytes 20
 
 It prints a summary line and one line per failing URL with the class, status, time, size, content type, and the error text. `-all` lists every URL, `-max-bytes` stops reading each body after that many bytes so the download list checks quickly, and `-emit-ok` writes the passing URLs to a file for building a pruned list. Run it from the network you test on, since blocking varies by region and by how much traffic a site has seen from you.
 
+## Steady load
+
+The default shape is a closed loop: each thread fetches, pauses for a random think time, and fetches again. That is how people browse, and the aggregate is bursty by construction. Two fields on the form change the shape when you want a flat line:
+
+- **Target Mbps per agent** paces every download with a token bucket, so with the download or max list each agent streams at that rate no matter how fast the link is. Sixteen agents at 20 Mbps is a steady 320 Mbps through the access point, the way sixteen video streams would be. This is the setting for "can this AP hold N clients at X Mbps each".
+- **Requests/s per agent** starts a request on a fixed cadence (open loop) instead of waiting on think time, using up to the thread count at once. If every thread is busy when a slot comes due, the slot is skipped and counted, which tells you the device could not keep up with the rate you asked for.
+
+Both can be combined. Worker starts are also staggered so a closed-loop test does not fire all its threads in lockstep, and the smooth checkbox above the charts applies a three-second moving average when you would rather read the trend than the half-second detail.
+
 ## What agents report about their Wi-Fi
 
-Every five seconds an agent reads its wireless link and sends it along: SSID, BSSID, band, channel and width, signal in dBm, noise where available, and the negotiated rate. Linux uses `iw`, which ships with Raspberry Pi OS. macOS uses `wdutil`, which needs root and is why the daemon runs as root; recent macOS versions hide the SSID and BSSID from processes without location access, so a Mac may report signal, channel, and rate without the network name, and without root it falls back to the slower `system_profiler`. Windows uses `netsh`, which reports signal as a percentage that is converted to an approximate dBm. A wired device simply shows no link. `surfswarm-agent wifi` prints exactly what a device would report and how long the read took, which is the first thing to run when the Wi-Fi column looks wrong.
+Twice a second an agent reads its wireless link (less often on platforms where the read is slow) and sends it along: SSID, BSSID, band, channel and width, signal in dBm, noise where available, and the negotiated rate. Linux uses `iw`, which ships with Raspberry Pi OS. macOS uses `wdutil`, which needs root and is why the daemon runs as root; recent macOS versions hide the SSID and BSSID from processes without location access, so a Mac may report signal, channel, and rate without the network name, and without root it falls back to the slower `system_profiler`. Windows uses `netsh`, which reports signal as a percentage that is converted to an approximate dBm. A wired device simply shows no link. `surfswarm-agent wifi` prints exactly what a device would report and how long the read took, which is the first thing to run when the Wi-Fi column looks wrong.
 
-The agents table shows the current link for each device. During a test, each per-second report carries the reading, so the live view charts signal and link rate over time, and the server logs events when a device roams to another BSSID, loses or regains Wi-Fi, or drops and restores its control connection to the server. The events line under the charts lists them for the selected view.
+The agents table shows the current link for each device. During a test, each report carries the reading, so the live view charts signal and link rate over time, and the server logs events when a device roams to another BSSID, loses or regains Wi-Fi, or drops and restores its control connection to the server. The events line under the charts lists them for the selected view.
 
 ## When an agent loses the server
 
-The control connection usually rides on the same Wi-Fi being loaded, so it is expected to drop exactly when results matter. An agent keeps its test running through a disconnect, queues its per-second reports (up to twenty minutes' worth), reconnects with backoff, and flushes the queue. The server fills in that device's history from the queued reports, notes the outage as an event, and waits up to ninety seconds past the test's end for stragglers before closing the test. Only the aggregate line has a gap for the seconds the server did not hear from the device.
+The control connection usually rides on the same Wi-Fi being loaded, so it is expected to drop exactly when results matter. An agent keeps its test running through a disconnect, queues its reports (up to twenty minutes' worth), reconnects with backoff, and flushes the queue. The server fills in that device's history from the queued reports, notes the outage as an event, and waits up to ninety seconds past the test's end for stragglers before closing the test. Only the aggregate line has a gap for the seconds the server did not hear from the device.
 
 ## Reading the live view
 
 The live panel shows one view at a time: every agent combined, or a single device. Click a device's button above the tiles, or its row in the table, to switch; click again to go back to all. The tiles give current and average Mbps, requests per second, totals, p50 and p95 request times, workers, and elapsed time for whichever view is selected.
 
-Six charts follow: throughput, requests per second, request time with p50 and p95, errors per second, Wi-Fi signal, and Wi-Fi link rate. Hover anywhere over a chart to snap to the nearest second and read its exact values; the readout follows the pointer and keeps updating while a test runs. The all-agents view charts the combined total as a single line. A checkbox above the tiles can add one thinner line per device on top of it, which is the quickest way to spot a device being starved while the others run fine; it is off by default. The error breakdown by class appears under the charts as agents finish.
+Six charts follow: throughput, requests per second, request time with p50 and p95, errors per second, Wi-Fi signal, and Wi-Fi link rate. Hover anywhere over a chart to snap to the nearest sample and read its exact values; the readout follows the pointer and keeps updating while a test runs. The all-agents view charts the combined total as a single line. A checkbox above the tiles can add one thinner line per device on top of it, which is the quickest way to spot a device being starved while the others run fine; it is off by default. The error breakdown by class appears under the charts as agents finish.
 
 Every failed request is logged with its time, URL, class, HTTP status, duration, and the error text. The view errors button next to a device in the results table, or under the charts for the selected view, opens that log; the all-agents version merges every device and labels each row. Agents send failures as they happen, so the log fills in live, and the server keeps the last 2,000 per device per test.
 
@@ -219,8 +228,8 @@ Every failed request is logged with its time, URL, class, HTTP status, duration,
 
 1. Server sends `start_test` with the full spec and the chosen URL list to each agent.
 2. Each agent starts N workers. A worker picks a random URL, sends a GET with browser-like headers, reads the whole body (counted as wire bytes, since we ask for gzip and do not decompress), sleeps for a random think time, and repeats. A request that goes quiet for longer than the stall timeout is dropped and counted as a timeout.
-3. Every second each agent reports cumulative requests, bytes, and errors, plus that second's Mbps and p50/p95 request time.
-4. The server sums the per-agent numbers once a second into a tick, keeps the history, and pushes ticks and per-agent updates to every open browser tab.
+3. Twice a second each agent reports cumulative requests, bytes, and errors, plus that interval's Mbps and p50/p95 request time, and its current Wi-Fi reading.
+4. The server sums the per-agent numbers twice a second into a tick, normalizing rates to per second, keeps the history, and pushes ticks and per-agent updates to every open browser tab.
 5. When the duration ends (or stop is pressed) each agent sends a summary with average Mbps, overall percentiles, and an error breakdown by class: dns, connect, timeout, tls, blocked (403/429), http_4xx, http_5xx, read.
 
 Test length, thread count, think time, stall timeout, and the URL list are all per test.
