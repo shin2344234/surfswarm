@@ -1,0 +1,55 @@
+# Demo: one server plus three agents in containers, so the UI can be tried
+# without any hardware. Run "docker compose up" and open http://localhost:8080.
+# The container agents sit on the host's wired network, so they show no Wi-Fi
+# link and their throughput reflects the host, not an access point. Real
+# tests use the agent binaries on real devices, pointed at this server.
+#
+# Set SURFSWARM_TOKEN, SURFSWARM_UI_PASSWORD, and SURFSWARM_PORT (the host
+# port, default 8080) in the environment or a .env file to change the
+# defaults below.
+
+x-agent: &agent
+  image: surfswarm:local
+  entrypoint: ["surfswarm-agent"]
+  environment:
+    SURFSWARM_SERVER: ws://server:8080/agent
+    SURFSWARM_TOKEN: ${SURFSWARM_TOKEN:-change-me}
+  depends_on:
+    - server
+  restart: unless-stopped
+
+services:
+  server:
+    build: .
+    image: surfswarm:local
+    ports:
+      - "${SURFSWARM_PORT:-8080}:8080"
+    environment:
+      SURFSWARM_LISTEN: ":8080"
+      SURFSWARM_TOKEN: ${SURFSWARM_TOKEN:-change-me}
+      SURFSWARM_UI_PASSWORD: ${SURFSWARM_UI_PASSWORD:-}
+    volumes:
+      - surfswarm-data:/var/lib/surfswarm/data
+    restart: unless-stopped
+
+  agent-1:
+    <<: *agent
+    environment:
+      SURFSWARM_SERVER: ws://server:8080/agent
+      SURFSWARM_TOKEN: ${SURFSWARM_TOKEN:-change-me}
+      SURFSWARM_NAME: demo-agent-1
+  agent-2:
+    <<: *agent
+    environment:
+      SURFSWARM_SERVER: ws://server:8080/agent
+      SURFSWARM_TOKEN: ${SURFSWARM_TOKEN:-change-me}
+      SURFSWARM_NAME: demo-agent-2
+  agent-3:
+    <<: *agent
+    environment:
+      SURFSWARM_SERVER: ws://server:8080/agent
+      SURFSWARM_TOKEN: ${SURFSWARM_TOKEN:-change-me}
+      SURFSWARM_NAME: demo-agent-3
+
+volumes:
+  surfswarm-data:

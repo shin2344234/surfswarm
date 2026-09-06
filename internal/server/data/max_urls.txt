@@ -1,0 +1,37 @@
+# Max throughput list: only the nearest, highest-capacity test files, so a
+# handful of threads per device can saturate a link. Pick this list with zero
+# think time and 8 to 16 threads per agent to find the ceiling of one access
+# point or switch: tick just the agents that sit behind it.
+#
+# Tuned for North America. Every entry answered in under half a second to
+# first byte from a US residential connection on 2026-09-05, except the
+# Hetzner Oregon file, which is included for West Coast reach. Outside North
+# America, re-check with cmd/urlcheck and swap in the closer Linode, Vultr,
+# and Hetzner regions from download_urls.txt.
+
+# Cloudflare edge, random data, served from the nearest point of presence
+https://speed.cloudflare.com/__down?bytes=50000000
+https://speed.cloudflare.com/__down?bytes=75000000
+
+# CacheFly CDN
+https://cachefly.cachefly.net/100mb.test
+
+# Linode / Akamai, US and Canada
+https://speedtest.dallas.linode.com/100MB-dallas.bin
+https://speedtest.atlanta.linode.com/100MB-atlanta.bin
+https://speedtest.newark.linode.com/100MB-newark.bin
+https://speedtest.fremont.linode.com/100MB-fremont.bin
+https://speedtest.toronto1.linode.com/100MB-toronto1.bin
+
+# Vultr, US
+https://tx-us-ping.vultr.com/vultr.com.100MB.bin
+https://il-us-ping.vultr.com/vultr.com.100MB.bin
+https://ga-us-ping.vultr.com/vultr.com.100MB.bin
+https://fl-us-ping.vultr.com/vultr.com.100MB.bin
+https://sjo-ca-us-ping.vultr.com/vultr.com.100MB.bin
+https://lax-ca-us-ping.vultr.com/vultr.com.100MB.bin
+https://wa-us-ping.vultr.com/vultr.com.100MB.bin
+https://nj-us-ping.vultr.com/vultr.com.100MB.bin
+
+# Hetzner, Oregon
+https://hil-speed.hetzner.com/100MB.bin

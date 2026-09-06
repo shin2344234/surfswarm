@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>surfswarm URL lists</title>
+<style>
+  :root {
+    --bg: #0f1419; --panel: #161d26; --line: #263040; --text: #e6edf3;
+    --muted: #8b9bb0; --accent: #3fb950; --bad: #f85149; --warn: #d29922;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  header { padding: 12px 20px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 16px; }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: .02em; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  header a { color: var(--accent); text-decoration: none; margin-left: auto; font-size: 13px; }
+  header a:hover { text-decoration: underline; }
+  main { padding: 20px; display: grid; grid-template-columns: 280px 1fr; gap: 20px; max-width: 1500px; margin: 0 auto; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; min-width: 0; }
+  section h2 { margin: 0 0 12px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+  .wide { grid-column: 1 / -1; }
+  .lists button { display: flex; width: 100%; text-align: left; align-items: center; gap: 8px; background: transparent; color: var(--text); border: 1px solid transparent; padding: 8px 10px; border-radius: 6px; font-weight: 500; font-size: 14px; cursor: pointer; }
+  .lists button:hover { background: #1b2430; }
+  .lists button.active { background: #1f3d2a; border-color: var(--accent); }
+  .lists .count { margin-left: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .badge { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: var(--line); color: var(--muted); }
+  .badge.mod { background: #3d3419; color: var(--warn); }
+  .badge.custom { background: #1e2f4a; color: #79c0ff; }
+  .newlist { display: flex; gap: 6px; margin-top: 12px; }
+  input, textarea { background: var(--bg); border: 1px solid var(--line); color: var(--text); padding: 6px 8px; border-radius: 4px; font-size: 14px; width: 100%; }
+  textarea { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.45; min-height: 460px; resize: vertical; white-space: pre; }
+  button { background: var(--accent); color: #04120a; border: 0; padding: 8px 14px; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 14px; }
+  button.secondary { background: var(--line); color: var(--text); font-weight: 500; }
+  button.danger { background: transparent; color: var(--bad); border: 1px solid var(--bad); font-weight: 500; }
+  button.small { padding: 4px 10px; font-size: 12px; }
+  button:disabled { opacity: .35; cursor: default; }
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
+  .toolbar .grow { flex: 1; }
+  .title { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .title h3 { margin: 0; font-size: 16px; font-weight: 600; }
+  .muted { color: var(--muted); }
+  .bad { color: var(--bad); }
+  .ok { color: var(--accent); }
+  .problems { margin: 8px 0 0; padding-left: 18px; color: var(--bad); }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; white-space: nowrap; }
+  td.num, th.num { text-align: right; }
+  td.nowrap { white-space: nowrap; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; word-break: break-all; }
+  .progress { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin: 8px 0; }
+  .progress div { height: 100%; background: var(--accent); width: 0; transition: width .3s; }
+  label.inline { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  label.inline input { width: auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>surfswarm</h1>
+  <span class="sub">URL lists</span>
+  <a href="/">Back to tests</a>
+</header>
+<main>
+  <section>
+    <h2>Lists</h2>
+    <div class="lists" id="lists"></div>
+    <div class="newlist">
+      <input id="new-name" placeholder="new list name" maxlength="40" spellcheck="false">
+      <button type="button" class="secondary" id="new-btn">New</button>
+    </div>
+    <p class="muted" style="font-size:12px">Names: lowercase letters, digits, dashes, underscores. A test picks one list by name; mixed is browse plus download.</p>
+  </section>
+
+  <section>
+    <h2>Editor</h2>
+    <div class="title"><h3 id="title">Pick a list</h3><span id="badges"></span></div>
+    <textarea id="editor" spellcheck="false" placeholder="One URL per line. Lines starting with # are comments."></textarea>
+    <div class="toolbar">
+      <button type="button" id="save" disabled>Save</button>
+      <button type="button" class="secondary" id="check" disabled>Check every URL</button>
+      <button type="button" class="danger small" id="reset" disabled>Reset to bundled</button>
+      <span class="grow"></span>
+      <span id="editor-msg" class="muted"></span>
+    </div>
+    <ul class="problems" id="problems" hidden></ul>
+    <p class="muted" style="font-size:12px">One http or https URL per line. Lines starting with # are comments and are kept. Saving replaces the list for the next test; running tests are not affected. Paste a customer's list here, save it, then check it from this page to see which sites refuse an automated client.</p>
+  </section>
+
+  <section class="wide" id="check-panel" hidden>
+    <h2>Check results <span class="muted" id="check-title" style="text-transform:none;letter-spacing:0"></span></h2>
+    <div class="progress"><div id="check-bar"></div></div>
+    <div class="toolbar">
+      <span id="check-summary" class="muted"></span>
+      <span class="grow"></span>
+      <label class="inline"><input type="checkbox" id="show-ok"> show passing URLs too</label>
+      <button type="button" class="secondary small" id="remove-failing" disabled>Remove failing lines from editor</button>
+    </div>
+    <div class="scroll">
+      <table id="check-table">
+        <thead><tr><th>Result</th><th class="num">Status</th><th class="num">ms</th><th class="num">Size</th><th>Type</th><th>URL</th><th>Message</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const fmt = (n, d = 0) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+
+  const state = { lists: [], current: null, info: null, isNew: false, dirty: false, check: null, poll: null };
+
+  async function api(method, path, body) {
+    const res = await fetch(path, {
+      method,
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = new Error(data.error || (res.status + ' ' + res.statusText));
+      err.problems = data.problems;
+      err.status = res.status;
+      throw err;
+    }
+    return data;
+  }
+
+  function badgesFor(li) {
+    if (!li) return '';
+    let h = '';
+    if (li.builtin) h += '<span class="badge">bundled</span> ';
+    if (li.modified) h += '<span class="badge mod">edited</span> ';
+    if (!li.builtin) h += '<span class="badge custom">custom</span> ';
+    return h;
+  }
+
+  async function loadLists() {
+    state.lists = await api('GET', '/api/lists');
+    const box = $('#lists');
+    box.innerHTML = '';
+    for (const li of state.lists) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = state.current === li.name ? 'active' : '';
+      b.innerHTML = esc(li.name) + ' ' + badgesFor(li) + '<span class="count">' + fmt(li.count) + '</span>';
+      b.addEventListener('click', () => select(li.name));
+      box.appendChild(b);
+    }
+    if (state.isNew) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'active';
+      b.innerHTML = esc(state.current) + ' <span class="badge custom">unsaved</span>';
+      box.appendChild(b);
+    }
+  }
+
+  function setMsg(text, cls) {
+    const el = $('#editor-msg');
+    el.textContent = text;
+    el.className = cls || 'muted';
+  }
+
+  function showProblems(list) {
+    const ul = $('#problems');
+    if (!list || !list.length) { ul.hidden = true; ul.innerHTML = ''; return; }
+    ul.innerHTML = list.map((p) => '<li>' + esc(p) + '</li>').join('');
+    ul.hidden = false;
+  }
+
+  function updateButtons() {
+    const have = !!state.current;
+    $('#save').disabled = !have;
+    $('#check').disabled = !have || state.isNew || (state.check && !state.check.done);
+    const reset = $('#reset');
+    reset.disabled = !have || state.isNew;
+    if (state.info && !state.info.builtin) reset.textContent = 'Delete list';
+    else reset.textContent = 'Reset to bundled';
+  }
+
+  async function select(name) {
+    if (state.dirty && !confirm('Discard unsaved changes to ' + state.current + '?')) return;
+    stopPolling();
+    state.isNew = false;
+    state.dirty = false;
+    state.check = null;
+    const data = await api('GET', '/api/lists/' + encodeURIComponent(name));
+    state.current = name;
+    state.info = data.info;
+    $('#title').textContent = name;
+    $('#badges').innerHTML = badgesFor(data.info);
+    $('#editor').value = data.text;
+    setMsg(fmt(data.info.count) + ' URLs' + (data.info.updated_at && data.info.modified !== undefined && (data.info.modified || !data.info.builtin) ? ', saved ' + new Date(data.info.updated_at).toLocaleString() : ''));
+    showProblems(null);
+    updateButtons();
+    await loadLists();
+    try {
+      const job = await api('GET', '/api/lists/' + encodeURIComponent(name) + '/check');
+      state.check = job;
+      renderCheck();
+      if (!job.done) startPolling();
+    } catch {
+      $('#check-panel').hidden = true;
+    }
+  }
+
+  $('#editor').addEventListener('input', () => { state.dirty = true; setMsg('Unsaved changes'); });
+
+  $('#save').addEventListener('click', async () => {
+    if (!state.current) return;
+    setMsg('Saving');
+    showProblems(null);
+    try {
+      const info = await api('PUT', '/api/lists/' + encodeURIComponent(state.current), { text: $('#editor').value });
+      state.info = info;
+      state.isNew = false;
+      state.dirty = false;
+      $('#badges').innerHTML = badgesFor(info);
+      setMsg('Saved: ' + fmt(info.count) + ' URLs. The next test that picks this list uses it.', 'ok');
+      updateButtons();
+      await loadLists();
+    } catch (err) {
+      setMsg(err.message, 'bad');
+      showProblems(err.problems);
+    }
+  });
+
+  $('#reset').addEventListener('click', async () => {
+    if (!state.current || state.isNew) return;
+    const builtin = state.info && state.info.builtin;
+    const q = builtin ? 'Reset ' + state.current + ' to the bundled list? Your edits will be lost.' : 'Delete the list ' + state.current + '?';
+    if (!confirm(q)) return;
+    try {
+      await api('DELETE', '/api/lists/' + encodeURIComponent(state.current));
+      state.dirty = false;
+      if (builtin) await select(state.current);
+      else { state.current = null; state.info = null; $('#title').textContent = 'Pick a list'; $('#badges').innerHTML = ''; $('#editor').value = ''; setMsg('Deleted'); updateButtons(); await loadLists(); }
+    } catch (err) {
+      setMsg(err.message, 'bad');
+    }
+  });
+
+  $('#new-btn').addEventListener('click', () => {
+    const name = $('#new-name').value.trim().toLowerCase();
+    if (!/^[a-z0-9][a-z0-9_-]{0,39}$/.test(name) || name === 'mixed') { setMsg('Names: lowercase letters, digits, dashes, underscores; "mixed" is reserved.', 'bad'); return; }
+    if (state.lists.some((l) => l.name === name)) { select(name); return; }
+    if (state.dirty && !confirm('Discard unsaved changes to ' + state.current + '?')) return;
+    stopPolling();
+    state.current = name;
+    state.info = { name, builtin: false, modified: false, count: 0 };
+    state.isNew = true;
+    state.dirty = false;
+    state.check = null;
+    $('#new-name').value = '';
+    $('#title').textContent = name;
+    $('#badges').innerHTML = '<span class="badge custom">unsaved</span>';
+    $('#editor').value = '# ' + name + '\n# One URL per line.\n';
+    $('#check-panel').hidden = true;
+    setMsg('New list. Paste URLs and save.');
+    showProblems(null);
+    updateButtons();
+    loadLists();
+    $('#editor').focus();
+  });
+
+  // ---- checking ----
+  $('#check').addEventListener('click', async () => {
+    if (!state.current) return;
+    if (state.dirty && !confirm('The check runs against the saved list. Continue without saving?')) return;
+    try {
+      state.check = await api('POST', '/api/lists/' + encodeURIComponent(state.current) + '/check');
+      renderCheck();
+      startPolling();
+      updateButtons();
+    } catch (err) {
+      setMsg(err.message, 'bad');
+    }
+  });
+
+  function startPolling() {
+    stopPolling();
+    state.poll = setInterval(async () => {
+      if (!state.current || !state.check) return stopPolling();
+      try {
+        state.check = await api('GET', '/api/lists/' + encodeURIComponent(state.current) + '/check');
+        renderCheck();
+        if (state.check.done) { stopPolling(); updateButtons(); }
+      } catch { stopPolling(); }
+    }, 1500);
+  }
+  function stopPolling() { if (state.poll) clearInterval(state.poll); state.poll = null; }
+
+  $('#show-ok').addEventListener('change', renderCheck);
+
+  function renderCheck() {
+    const j = state.check;
+    const panel = $('#check-panel');
+    if (!j) { panel.hidden = true; return; }
+    panel.hidden = false;
+    $('#check-title').textContent = 'for ' + j.list + (j.done ? ', finished ' + new Date(j.ended_at).toLocaleTimeString() : ', running');
+    $('#check-bar').style.width = (j.total ? Math.round(100 * j.completed / j.total) : 0) + '%';
+    const parts = Object.entries(j.summary || {}).sort((a, b) => b[1] - a[1]).map(([k, n]) => k + ' ' + n);
+    $('#check-summary').textContent = fmt(j.completed) + ' of ' + fmt(j.total) + ' checked' + (parts.length ? ': ' + parts.join(', ') : '');
+    const showOK = $('#show-ok').checked;
+    const rows = (j.results || []).filter((r) => showOK || r.class);
+    $('#check-table tbody').innerHTML = rows.map((r) =>
+      '<tr><td class="nowrap ' + (r.class ? 'bad' : 'ok') + '">' + esc(r.class || 'ok') + '</td>' +
+      '<td class="num">' + (r.status || '') + '</td>' +
+      '<td class="num">' + fmt(r.ms) + '</td>' +
+      '<td class="num">' + (r.length > 0 ? fmt(r.length / 1e6, 1) + ' MB' : '') + '</td>' +
+      '<td class="nowrap muted">' + esc((r.type || '').split(';')[0]) + '</td>' +
+      '<td class="mono">' + esc(r.url) + (r.final_url && r.final_url !== r.url ? '<br><span class="muted">→ ' + esc(r.final_url) + '</span>' : '') + '</td>' +
+      '<td class="mono">' + esc(r.message || '') + '</td></tr>').join('');
+    const failing = (j.results || []).filter((r) => r.class).length;
+    $('#remove-failing').disabled = !j.done || !failing;
+    $('#remove-failing').textContent = 'Remove ' + failing + ' failing line' + (failing === 1 ? '' : 's') + ' from editor';
+  }
+
+  $('#remove-failing').addEventListener('click', () => {
+    const j = state.check;
+    if (!j || !j.done) return;
+    const bad = new Set(j.results.filter((r) => r.class).map((r) => r.url));
+    const lines = $('#editor').value.split('\n');
+    const kept = lines.filter((l) => !bad.has(l.trim()));
+    $('#editor').value = kept.join('\n');
+    state.dirty = true;
+    setMsg('Removed ' + (lines.length - kept.length) + ' lines. Save to keep the change.', 'ok');
+  });
+
+  window.addEventListener('beforeunload', (e) => { if (state.dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+  (async () => {
+    await loadLists();
+    const first = new URLSearchParams(location.search).get('list') || (state.lists[0] && state.lists[0].name);
+    if (first) select(first);
+  })();
+})();
+</script>
+</body>
+</html>

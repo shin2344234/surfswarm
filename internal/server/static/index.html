@@ -1,0 +1,923 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>surfswarm</title>
+<style>
+  :root {
+    --bg: #0f1419; --panel: #161d26; --line: #263040; --text: #e6edf3;
+    --muted: #8b9bb0; --accent: #3fb950; --bad: #f85149; --warn: #d29922;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  header { padding: 12px 20px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 16px; }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: .02em; }
+  header .status { color: var(--muted); font-size: 13px; }
+  header a.nav { color: var(--accent); text-decoration: none; margin-left: auto; font-size: 13px; }
+  header a.nav:hover { text-decoration: underline; }
+  main { padding: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 1500px; margin: 0 auto; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; min-width: 0; }
+  section h2 { margin: 0 0 12px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+  .wide { grid-column: 1 / -1; }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  td.num, th.num { text-align: right; }
+  tr.clickable { cursor: pointer; }
+  tr.clickable:hover td { background: #1b2430; }
+  tr.selected td { background: #1f3d2a; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--muted); vertical-align: middle; }
+  .dot.on { background: var(--accent); }
+  .swatch { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+  form { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; align-items: end; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  label.inline { flex-direction: row; align-items: center; gap: 6px; font-size: 13px; }
+  input, select { background: var(--bg); border: 1px solid var(--line); color: var(--text); padding: 6px 8px; border-radius: 4px; font-size: 14px; width: 100%; }
+  input[type="checkbox"] { width: auto; }
+  button { background: var(--accent); color: #04120a; border: 0; padding: 8px 14px; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 14px; }
+  button.stop { background: var(--bad); color: #fff; }
+  button.small { background: var(--line); color: var(--text); padding: 4px 10px; font-size: 12px; font-weight: 500; }
+  button:disabled { opacity: .35; cursor: default; }
+  .actions { display: flex; gap: 8px; }
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+  .views { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
+  .views button { background: var(--line); color: var(--text); font-weight: 500; padding: 5px 10px; font-size: 13px; border: 1px solid transparent; }
+  .views button.active { border-color: var(--accent); color: var(--accent); background: #1f3d2a; }
+  .views .spacer { flex: 1; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .stat { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+  .stat .v { font-size: 22px; font-weight: 600; line-height: 1.1; }
+  .stat .l { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  @media (max-width: 900px) { .charts { grid-template-columns: 1fr; } }
+  .charts canvas { width: 100%; height: 220px; display: block; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
+  .classes { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+  .muted { color: var(--muted); }
+  .bad { color: var(--bad); }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; background: var(--line); color: var(--text); }
+  .pill.running { background: #1f3d2a; color: var(--accent); }
+  .pill.stopping { background: #3d3419; color: var(--warn); }
+  .modal-bg { position: fixed; inset: 0; background: rgba(0, 0, 0, .65); display: flex; align-items: center; justify-content: center; z-index: 10; padding: 20px; }
+  .modal-bg[hidden] { display: none; }
+  .modal { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; width: min(1150px, 100%); max-height: 90vh; display: flex; flex-direction: column; min-width: 0; }
+  .modal .head { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 12px; }
+  .modal .head h3 { margin: 0; font-size: 15px; font-weight: 600; flex: 1; }
+  .modal .body { overflow: auto; padding: 0 16px 16px; }
+  .modal table td { white-space: normal; word-break: break-all; vertical-align: top; }
+  .modal td.nowrap, .modal th.nowrap { white-space: nowrap; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+  .classes button { margin-left: 8px; }
+  .charts canvas { cursor: crosshair; }
+  .tip { position: fixed; pointer-events: none; background: #1b2430; border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; font-size: 12px; line-height: 1.5; z-index: 20; white-space: nowrap; box-shadow: 0 4px 16px rgba(0, 0, 0, .45); }
+  .tip[hidden] { display: none; }
+  .tip b { font-weight: 600; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<header>
+  <h1>surfswarm</h1>
+  <span class="status" id="conn">connecting</span>
+  <a class="nav" href="/lists">Edit URL lists</a>
+</header>
+<main>
+  <section>
+    <h2>Agents</h2>
+    <div class="toolbar">
+      <button type="button" class="small" id="select-all">Select all online</button>
+      <button type="button" class="small" id="select-none">Clear</button>
+      <span class="muted" id="select-hint"></span>
+    </div>
+    <div class="scroll">
+      <table id="agents">
+        <thead><tr><th></th><th>Name</th><th>Address</th><th>Platform</th><th>Wi-Fi</th><th>Version</th><th>Seen</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="muted" id="agents-empty">No agents have connected yet.</p>
+  </section>
+
+  <section>
+    <h2>New test</h2>
+    <form id="test-form">
+      <label title="Which URL list the agents draw from. Edit the lists or add your own from the link in the header.">URL list<select name="url_list" id="url-list">
+        <option value="browse">Browse: popular sites</option>
+        <option value="download">Download: test files, worldwide</option>
+        <option value="max">Max throughput: nearby 100 MB files</option>
+        <option value="mixed">Mixed: browse + download</option>
+      </select></label>
+      <label title="How many simulated users each agent runs at once. Each thread fetches one URL at a time.">Threads per agent<input name="threads" type="number" value="4" min="1" max="500"></label>
+      <label title="How long the test runs before every agent stops on its own.">Duration (s)<input name="duration_s" type="number" value="60" min="1"></label>
+      <label title="Think time is the pause a thread takes between one request and the next, like a person reading a page before clicking again. Each pause is a random length between min and max. Zero on both means no pause: a throughput test.">Think min (ms)<input name="think_min_ms" type="number" value="1000" min="0"></label>
+      <label title="Upper end of the random pause between requests. Set both min and max to zero for a throughput test.">Think max (ms)<input name="think_max_ms" type="number" value="5000" min="0"></label>
+      <label title="A request is abandoned and counted as a timeout when no bytes have arrived for this long. Large downloads keep going as long as data flows.">Stall timeout (ms)<input name="timeout_ms" type="number" value="15000" min="1000"></label>
+      <div class="actions">
+        <button type="submit" id="start">Start</button>
+        <button type="button" class="stop" id="stop" disabled>Stop</button>
+      </div>
+    </form>
+    <p class="muted" id="form-msg">Each thread fetches a random URL from the list, pauses for a random think time between min and max (a person reading before the next click), and repeats. Max throughput with zero think time and many threads finds the ceiling of whatever the ticked agents share. Hover a field name for details.</p>
+  </section>
+
+  <section class="wide">
+    <h2>Live <span id="test-title" class="muted" style="text-transform:none;letter-spacing:0"></span></h2>
+    <div class="views" id="views"></div>
+    <div class="stats" id="stats"></div>
+    <div class="charts">
+      <canvas id="c-mbps" width="800" height="240"></canvas>
+      <canvas id="c-req" width="800" height="240"></canvas>
+      <canvas id="c-lat" width="800" height="240"></canvas>
+      <canvas id="c-err" width="800" height="240"></canvas>
+      <canvas id="c-sig" width="800" height="240"></canvas>
+      <canvas id="c-rate" width="800" height="240"></canvas>
+    </div>
+    <p class="classes" id="classes"></p>
+    <p class="classes" id="events"></p>
+    <div class="scroll">
+      <table id="results">
+        <thead><tr><th>Agent</th><th class="num">Mbps</th><th class="num">Avg Mbps</th><th class="num">Req/s</th><th class="num">Requests</th><th class="num">MB</th><th class="num">Errors</th><th class="num">p50 ms</th><th class="num">p95 ms</th><th class="num">Workers</th><th class="num">Signal</th><th class="num">Link</th><th>State</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="muted" id="results-empty">Start a test to see per-agent results. Click an agent row or button to chart that device on its own.</p>
+  </section>
+</main>
+<div id="tip" class="tip" hidden></div>
+<div id="modal" class="modal-bg" hidden></div>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const fmt = (n, d = 0) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+  const ACCENT = '#3fb950';
+  const PALETTE = ['#58a6ff', '#f0883e', '#d2a8ff', '#ff7b72', '#e3b341', '#56d4dd', '#ffa657', '#7ee787', '#79c0ff', '#f778ba'];
+  const PRESETS = {
+    browse:   { threads: 4,  think_min_ms: 1000, think_max_ms: 5000, timeout_ms: 15000 },
+    download: { threads: 4,  think_min_ms: 0,    think_max_ms: 0,    timeout_ms: 30000 },
+    max:      { threads: 16, think_min_ms: 0,    think_max_ms: 0,    timeout_ms: 30000 },
+    mixed:    { threads: 4,  think_min_ms: 500,  think_max_ms: 2000, timeout_ms: 30000 },
+  };
+
+  // overlay adds one line per device to the all-agents charts; off by default
+  // so the combined view reads as a single aggregate number.
+  const state = { agents: [], test: null, view: 'all', overlay: false, selected: new Set() };
+
+  // ---- helpers ----
+  function ago(iso) {
+    const s = (Date.now() - new Date(iso).getTime()) / 1000;
+    if (s < 5) return 'just now';
+    if (s < 60) return Math.round(s) + 's ago';
+    if (s < 3600) return Math.round(s / 60) + 'm ago';
+    return Math.round(s / 3600) + 'h ago';
+  }
+  function running() { return !!(state.test && state.test.status !== 'done'); }
+  function sortedAgents() {
+    return state.test ? Object.values(state.test.agents || {}).sort((a, b) => a.name.localeCompare(b.name)) : [];
+  }
+  function agentIndex(id) { return sortedAgents().findIndex((a) => a.agent_id === id); }
+  function agentColor(i) { return PALETTE[((i % PALETTE.length) + PALETTE.length) % PALETTE.length]; }
+  function rate(n, p, prev) {
+    if (!prev) return n;
+    const dt = (p.ts - prev.ts) / 1000;
+    return dt > 0 ? n / dt : n;
+  }
+  function elapsedOf(t) {
+    const start = new Date(t.started_at).getTime();
+    const end = t.ended_at ? new Date(t.ended_at).getTime() : Date.now();
+    return Math.max(0, (end - start) / 1000);
+  }
+  function wifiText(w) {
+    if (!w) return 'wired / none';
+    const parts = [];
+    if (w.ssid) parts.push(w.ssid);
+    if (w.signal_dbm) parts.push(w.signal_dbm + ' dBm');
+    if (w.band) parts.push(w.band + ' GHz' + (w.channel ? ' ch ' + w.channel : ''));
+    if (w.tx_mbps) parts.push(fmt(w.tx_mbps) + ' Mbps');
+    return parts.join(' · ') || 'wi-fi';
+  }
+  const EVENT_LABELS = { roam: 'roamed', wifi_lost: 'Wi-Fi lost', wifi_back: 'Wi-Fi back', offline: 'lost the server', online: 'reconnected' };
+
+  // ---- agents panel ----
+  function renderAgents() {
+    const tb = $('#agents tbody');
+    tb.innerHTML = '';
+    $('#agents-empty').hidden = state.agents.length > 0;
+    for (const a of state.agents) {
+      const tr = document.createElement('tr');
+      const addr = (a.ips && a.ips.length) ? a.ips.join(', ') : (a.remote_addr || '');
+      tr.innerHTML =
+        '<td><input type="checkbox"' + (a.online ? '' : ' disabled') + (state.selected.has(a.id) ? ' checked' : '') + '></td>' +
+        '<td><span class="dot' + (a.online ? ' on' : '') + '"></span>' + esc(a.name) + '</td>' +
+        '<td>' + esc(addr) + '</td>' +
+        '<td>' + esc(a.os) + '/' + esc(a.arch) + '</td>' +
+        '<td class="muted">' + esc(wifiText(a.wifi)) + '</td>' +
+        '<td class="muted">' + esc(a.version) + '</td>' +
+        '<td class="muted">' + (a.online ? 'online' : ago(a.last_seen)) + '</td>';
+      tr.querySelector('input').addEventListener('change', (e) => {
+        if (e.target.checked) state.selected.add(a.id); else state.selected.delete(a.id);
+        updateButtons();
+      });
+      tb.appendChild(tr);
+    }
+    updateButtons();
+  }
+
+  function updateButtons() {
+    const online = state.agents.filter((a) => a.online);
+    for (const id of [...state.selected]) if (!online.some((a) => a.id === id)) state.selected.delete(id);
+    const n = state.selected.size || online.length;
+    const start = $('#start');
+    start.disabled = running() || online.length === 0;
+    start.textContent = online.length ? 'Start on ' + n + ' agent' + (n === 1 ? '' : 's') : 'Start';
+    $('#stop').disabled = !running();
+    $('#select-hint').textContent = state.selected.size
+      ? state.selected.size + ' ticked; the test runs only on those'
+      : 'Nothing ticked: the test runs on every online agent';
+  }
+
+  $('#select-all').addEventListener('click', () => {
+    for (const a of state.agents) if (a.online) state.selected.add(a.id);
+    renderAgents();
+  });
+  $('#select-none').addEventListener('click', () => { state.selected.clear(); renderAgents(); });
+
+  // ---- test state ----
+  function setTest(t) {
+    state.test = t || null;
+    if (state.test) {
+      state.test.history = state.test.history || [];
+      state.test.agent_history = state.test.agent_history || {};
+      state.test.agent_errors = state.test.agent_errors || {};
+      state.test.agents = state.test.agents || {};
+      if (state.view !== 'all' && !state.test.agents[state.view]) state.view = 'all';
+    } else {
+      closeErrors();
+    }
+    render();
+  }
+
+  // ---- error log modal ----
+  let errorsOpenFor = null; // null = closed, 'all' or an agent id
+
+  function errorEntries(agentId) {
+    const t = state.test;
+    if (!t) return [];
+    const ids = agentId === 'all' ? sortedAgents().map((a) => a.agent_id) : [agentId];
+    const rows = [];
+    for (const id of ids) {
+      const name = (t.agents[id] || {}).name || id;
+      for (const e of t.agent_errors[id] || []) rows.push({ ...e, agent: name });
+    }
+    rows.sort((a, b) => a.ts - b.ts);
+    return rows;
+  }
+
+  function openErrors(agentId) {
+    errorsOpenFor = agentId;
+    renderErrors();
+  }
+
+  function closeErrors() {
+    errorsOpenFor = null;
+    const m = $('#modal');
+    m.hidden = true;
+    m.innerHTML = '';
+  }
+
+  function renderErrors() {
+    const m = $('#modal');
+    if (errorsOpenFor === null || !state.test) { m.hidden = true; return; }
+    const t = state.test;
+    const all = errorsOpenFor === 'all';
+    const who = all ? 'all agents' : ((t.agents[errorsOpenFor] || {}).name || errorsOpenFor);
+    const rows = errorEntries(errorsOpenFor);
+    const t0 = new Date(t.started_at).getTime();
+    const counted = all
+      ? sortedAgents().reduce((n, a) => n + ((a.latest && a.latest.errors) || 0), 0)
+      : (((t.agents[errorsOpenFor] || {}).latest || {}).errors || 0);
+
+    let body;
+    if (!rows.length && counted) {
+      body = '<p class="muted">' + counted + ' error' + (counted === 1 ? '' : 's') + ' counted, but no details were reported. The agent build predates per-request error logging; update it to see URLs and messages.</p>';
+    } else if (!rows.length) {
+      body = '<p class="muted">No errors' + (running() ? ' so far.' : '.') + '</p>';
+    } else {
+      body = '<table><thead><tr><th class="nowrap">Time</th>' + (all ? '<th class="nowrap">Agent</th>' : '') +
+        '<th class="nowrap">Class</th><th class="nowrap num">Status</th><th class="nowrap num">ms</th><th>URL</th><th>Message</th></tr></thead><tbody>' +
+        rows.map((e) =>
+          '<tr><td class="nowrap">' + fmtTime((e.ts - t0) / 1000) + '</td>' +
+          (all ? '<td class="nowrap">' + esc(e.agent) + '</td>' : '') +
+          '<td class="nowrap">' + esc(e.class) + '</td>' +
+          '<td class="nowrap num">' + (e.status || '') + '</td>' +
+          '<td class="nowrap num">' + fmt(e.ms) + '</td>' +
+          '<td class="mono">' + esc(e.url) + '</td>' +
+          '<td class="mono">' + esc(e.message || '') + '</td></tr>').join('') +
+        '</tbody></table>';
+      if (rows.length !== counted && counted > rows.length) {
+        body += '<p class="muted">' + rows.length + ' of ' + counted + ' errors shown; the log keeps the most recent 2,000 per device.</p>';
+      }
+    }
+
+    m.innerHTML =
+      '<div class="modal" role="dialog" aria-modal="true">' +
+      '<div class="head"><h3>Errors: ' + esc(who) + ' <span class="muted">(' + rows.length + ')</span></h3>' +
+      '<button type="button" class="small" id="modal-copy"' + (rows.length ? '' : ' disabled') + '>Copy as text</button>' +
+      '<button type="button" class="small" id="modal-close">Close</button></div>' +
+      '<div class="body">' + body + '</div></div>';
+    m.hidden = false;
+    $('#modal-close').addEventListener('click', closeErrors);
+    $('#modal-copy').addEventListener('click', () => {
+      const text = ['time\tagent\tclass\tstatus\tms\turl\tmessage'].concat(rows.map((e) =>
+        [fmtTime((e.ts - t0) / 1000), e.agent, e.class, e.status || '', Math.round(e.ms), e.url, e.message || ''].join('\t'))).join('\n');
+      navigator.clipboard.writeText(text).then(
+        () => { $('#modal-copy').textContent = 'Copied'; },
+        () => { $('#modal-copy').textContent = 'Copy failed'; });
+    });
+  }
+
+  $('#modal').addEventListener('click', (e) => { if (e.target === $('#modal')) closeErrors(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeErrors(); });
+
+  // Coalesce bursts of events into one render. A timer rather than
+  // requestAnimationFrame, so a background tab keeps up and is current
+  // the moment it is shown again.
+  let renderQueued = false;
+  function render() {
+    if (renderQueued) return;
+    renderQueued = true;
+    setTimeout(() => { renderQueued = false; renderNow(); }, 60);
+  }
+
+  function renderNow() {
+    const t = state.test;
+    updateButtons();
+    if (!t) {
+      $('#test-title').textContent = '';
+      $('#views').innerHTML = '';
+      $('#stats').innerHTML = '';
+      $('#classes').textContent = '';
+      $('#results tbody').innerHTML = '';
+      $('#results-empty').hidden = false;
+      $('#events').textContent = '';
+      for (const id of ['c-mbps', 'c-req', 'c-lat', 'c-err', 'c-sig', 'c-rate']) drawChart($('#' + id), '', [], 0, 0);
+      return;
+    }
+    const s = t.spec || {};
+    $('#test-title').innerHTML =
+      ' <span class="pill ' + esc(t.status) + '">' + esc(t.status) + '</span> ' +
+      'test ' + esc(t.id) + ': ' + s.threads + ' threads x ' + Object.keys(t.agents).length + ' agents, ' +
+      s.duration_s + 's, think ' + s.think_min_ms + '-' + s.think_max_ms + ' ms, stall ' + s.timeout_ms + ' ms, ' +
+      esc(t.url_list || 'browse') + ' list (' + t.url_count + ' URLs)';
+    renderViews();
+    renderStats();
+    renderCharts();
+    renderClasses();
+    renderEvents();
+    renderResults();
+    if (errorsOpenFor !== null) renderErrors();
+  }
+
+  function renderEvents() {
+    const t = state.test;
+    const t0 = new Date(t.started_at).getTime();
+    const list = state.view === 'all' ? sortedAgents() : [t.agents[state.view]].filter(Boolean);
+    const rows = [];
+    for (const a of list) for (const e of a.events || []) rows.push({ ...e, agent: a.name });
+    rows.sort((a, b) => a.ts - b.ts);
+    const el = $('#events');
+    if (!rows.length) { el.textContent = 'No roams or dropouts' + (running() ? ' so far.' : '.'); return; }
+    const shown = rows.slice(-12);
+    el.innerHTML = 'Events' + (rows.length > shown.length ? ' (last ' + shown.length + ' of ' + rows.length + ')' : '') + ': ' +
+      shown.map((e) => fmtTime((e.ts - t0) / 1000) + ' ' + (state.view === 'all' ? esc(e.agent) + ' ' : '') + (EVENT_LABELS[e.kind] || esc(e.kind)) +
+        (e.from ? ' from ' + esc(e.from) : '') + (e.to ? ' to ' + esc(e.to) : '') + (e.detail ? ' (' + esc(e.detail) + ')' : '')).join('; ') + '.';
+  }
+
+  function renderViews() {
+    const box = $('#views');
+    box.innerHTML = '';
+    const mk = (label, id, color) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.innerHTML = (color ? '<span class="swatch" style="background:' + color + '"></span>' : '') + esc(label);
+      if (state.view === id) b.classList.add('active');
+      b.addEventListener('click', () => { state.view = id; render(); });
+      box.appendChild(b);
+    };
+    mk('All agents', 'all', ACCENT);
+    sortedAgents().forEach((a, i) => mk(a.name, a.agent_id, agentColor(i)));
+    if (state.view === 'all' && sortedAgents().length > 1) {
+      const sp = document.createElement('span'); sp.className = 'spacer'; box.appendChild(sp);
+      const lab = document.createElement('label'); lab.className = 'inline';
+      lab.innerHTML = '<input type="checkbox"' + (state.overlay ? ' checked' : '') + '> also show one line per device';
+      lab.querySelector('input').addEventListener('change', (e) => { state.overlay = e.target.checked; render(); });
+      box.appendChild(lab);
+    }
+  }
+
+  // recentLatency averages the last few non-empty one-second percentiles so
+  // the tiles do not flicker to zero in seconds where no request finished.
+  function recentLatency(points, key50, key95) {
+    let n = 0, s50 = 0, s95 = 0;
+    for (let i = points.length - 1; i >= 0 && n < 10; i--) {
+      const p = points[i];
+      if (!p[key50] && !p[key95]) continue;
+      s50 += p[key50] || 0; s95 += p[key95] || 0; n++;
+    }
+    return n ? [s50 / n, s95 / n] : [0, 0];
+  }
+
+  // overallLatency weights each finished agent's whole-run percentiles by
+  // its request count.
+  function overallLatency(agents) {
+    let n = 0, s50 = 0, s95 = 0;
+    for (const a of agents) {
+      const p = a.latest || {};
+      if (!p.requests) continue;
+      n += p.requests; s50 += (p.p50_ms || 0) * p.requests; s95 += (p.p95_ms || 0) * p.requests;
+    }
+    return n ? [s50 / n, s95 / n] : [0, 0];
+  }
+
+  function viewStats() {
+    const t = state.test;
+    const done = t.status === 'done';
+    if (state.view === 'all') {
+      const x = t.totals || {};
+      const elapsed = elapsedOf(t);
+      const [p50, p95] = done ? overallLatency(sortedAgents()) : recentLatency(t.history, 'p50_ms', 'p95_ms');
+      let weakest = null;
+      for (const a of sortedAgents()) if (a.wifi && a.wifi.signal_dbm && (!weakest || a.wifi.signal_dbm < weakest.dbm)) weakest = { dbm: a.wifi.signal_dbm, name: a.name };
+      return {
+        now: done ? 0 : x.mbps, avg: elapsed ? (x.bytes || 0) * 8 / 1e6 / elapsed : 0, rps: done ? 0 : x.req_per_sec,
+        requests: x.requests, bytes: x.bytes, errors: x.errors, p50, p95,
+        workers: done ? 0 : x.workers, elapsed, label: 'Agents reporting', labelValue: done ? 0 : x.active_agents,
+        extra: weakest ? [[weakest.dbm + ' dBm', 'Weakest signal: ' + weakest.name]] : [],
+      };
+    }
+    const a = t.agents[state.view];
+    const p = (a && a.latest) || {};
+    const elapsed = p.elapsed_s || elapsedOf(t);
+    const [p50, p95] = a.done ? [p.p50_ms, p.p95_ms] : recentLatency(t.agent_history[state.view] || [], 'p50_ms', 'p95_ms');
+    const w = a.wifi;
+    const extra = w ? [
+      [w.signal_dbm ? w.signal_dbm + ' dBm' : 'n/a', 'Signal' + (w.band ? ', ' + w.band + ' GHz ch ' + w.channel : '')],
+      [w.tx_mbps ? fmt(w.tx_mbps) : 'n/a', 'Link Mbps' + (w.ssid ? ', ' + w.ssid : '')],
+    ] : [['wired', 'No Wi-Fi link reported']];
+    return {
+      now: a.done ? 0 : p.mbps, avg: a.done ? p.mbps : (elapsed ? (p.bytes || 0) * 8 / 1e6 / elapsed : 0),
+      rps: a.done ? 0 : p.interval_requests, requests: p.requests, bytes: p.bytes, errors: p.errors,
+      p50, p95, workers: a.done ? 0 : p.active_workers, elapsed,
+      label: 'State', labelValue: a.done ? 'done' : (p.ts ? 'running' : 'waiting'), extra,
+    };
+  }
+
+  function renderStats() {
+    const v = viewStats();
+    const tiles = [
+      [fmt(v.now, 1), 'Mbps now'], [fmt(v.avg, 1), 'Mbps average'], [fmt(v.rps, 1), 'Requests/s'],
+      [fmt(v.requests), 'Requests'], [fmt((v.bytes || 0) / 1e6, 1), 'MB'], [fmt(v.errors), 'Errors', v.errors ? 'bad' : ''],
+      [fmt(v.p50), 'p50 ms'], [fmt(v.p95), 'p95 ms'], [fmt(v.workers), 'Workers'],
+      [Math.round(v.elapsed) + 's', 'Elapsed'], [typeof v.labelValue === 'number' ? fmt(v.labelValue) : esc(v.labelValue), v.label],
+      ...(v.extra || []).map(([val, label]) => [esc(val), esc(label)]),
+    ];
+    $('#stats').innerHTML = tiles.map(([val, label, cls]) =>
+      '<div class="stat"><div class="v ' + (cls || '') + '">' + val + '</div><div class="l">' + label + '</div></div>').join('');
+  }
+
+  function viewSeries() {
+    const t = state.test;
+    const t0 = new Date(t.started_at).getTime();
+    const t1 = t.ended_at ? new Date(t.ended_at).getTime() : Date.now();
+    if (state.view === 'all') {
+      const h = t.history;
+      const mbps = [{ name: 'all agents', color: ACCENT, fill: true, pts: h.map((x) => [x.ts, x.mbps]) }];
+      const req = [{ name: 'all agents', color: ACCENT, fill: true, pts: h.map((x) => [x.ts, x.req_per_sec]) }];
+      if (state.overlay && sortedAgents().length > 1) {
+        sortedAgents().forEach((a, i) => {
+          const ah = t.agent_history[a.agent_id] || [];
+          mbps.push({ name: a.name, color: agentColor(i), width: 1.25, pts: ah.map((p) => [p.ts, p.mbps]) });
+          req.push({ name: a.name, color: agentColor(i), width: 1.25, pts: ah.map((p, j) => [p.ts, rate(p.interval_requests, p, ah[j - 1])]) });
+        });
+      }
+      return { t0, t1, mbps, req,
+        lat: [{ name: 'p50', color: ACCENT, pts: h.map((x) => [x.ts, x.p50_ms]) }, { name: 'p95', color: '#f0883e', pts: h.map((x) => [x.ts, x.p95_ms]) }],
+        err: [{ name: 'errors/s', color: '#f85149', fill: true, pts: h.map((x) => [x.ts, x.err_per_sec]) }] };
+    }
+    const i = agentIndex(state.view);
+    const a = t.agents[state.view];
+    const color = agentColor(i);
+    const ah = t.agent_history[state.view] || [];
+    return { t0, t1,
+      mbps: [{ name: a.name, color, fill: true, pts: ah.map((p) => [p.ts, p.mbps]) }],
+      req: [{ name: a.name, color, fill: true, pts: ah.map((p, j) => [p.ts, rate(p.interval_requests, p, ah[j - 1])]) }],
+      lat: [{ name: 'p50', color, pts: ah.map((p) => [p.ts, p.p50_ms]) }, { name: 'p95', color: '#f0883e', pts: ah.map((p) => [p.ts, p.p95_ms]) }],
+      err: [{ name: 'errors/s', color: '#f85149', fill: true, pts: ah.map((p, j) => [p.ts, j ? rate(Math.max(0, p.errors - ah[j - 1].errors), p, ah[j - 1]) : 0]) }] };
+  }
+
+  // wifiSeries builds one line per agent (or one for the selected device)
+  // from the Wi-Fi reading attached to each per-second report.
+  function wifiSeries(key) {
+    const t = state.test;
+    const agents = state.view === 'all' ? sortedAgents() : [t.agents[state.view]].filter(Boolean);
+    return agents.map((a) => {
+      const i = agentIndex(a.agent_id);
+      const ah = t.agent_history[a.agent_id] || [];
+      return { name: a.name, color: state.view === 'all' ? agentColor(i) : agentColor(i), width: state.view === 'all' ? 1.5 : 2,
+        pts: ah.filter((p) => p.wifi && p.wifi[key]).map((p) => [p.ts, p.wifi[key]]) };
+    }).filter((s) => s.pts.length);
+  }
+
+  function renderCharts() {
+    const v = viewSeries();
+    drawChart($('#c-mbps'), 'Throughput, Mbps', v.mbps, v.t0, v.t1, 'Mbps');
+    drawChart($('#c-req'), 'Requests per second', v.req, v.t0, v.t1, 'req/s');
+    drawChart($('#c-lat'), 'Request time, ms', v.lat, v.t0, v.t1, 'ms');
+    drawChart($('#c-err'), 'Errors per second', v.err, v.t0, v.t1, '/s');
+    drawChart($('#c-sig'), 'Wi-Fi signal, dBm', wifiSeries('signal_dbm'), v.t0, v.t1, 'dBm', false);
+    drawChart($('#c-rate'), 'Wi-Fi link rate, Mbps', wifiSeries('tx_mbps'), v.t0, v.t1, 'Mbps');
+  }
+
+  function renderClasses() {
+    const t = state.test;
+    let classes = {};
+    let errors = 0;
+    let anyDone = false;
+    const list = state.view === 'all' ? sortedAgents() : [t.agents[state.view]].filter(Boolean);
+    for (const a of list) {
+      errors += (a.latest && a.latest.errors) || 0;
+      if (a.done) anyDone = true;
+      for (const [k, n] of Object.entries(a.errors_by_class || {})) classes[k] = (classes[k] || 0) + n;
+    }
+    const el = $('#classes');
+    if (!errors) { el.textContent = 'No errors' + (running() ? ' so far.' : '.'); return; }
+    const parts = Object.entries(classes).sort((x, y) => y[1] - x[1]).map(([k, n]) => esc(k) + ' ' + n);
+    const logged = errorEntries(state.view).length;
+    el.innerHTML = (parts.length
+      ? 'Errors by class: ' + parts.join(', ') + '. blocked means the site answered 403 or 429 to an automated client; timeout means no bytes arrived for the stall timeout.'
+      : 'Errors so far: ' + errors + '. The breakdown by class arrives when the agent finishes.') +
+      '<button type="button" class="small" id="view-errors">View error log (' + logged + ')</button>';
+    $('#view-errors').addEventListener('click', () => openErrors(state.view));
+  }
+
+  function renderResults() {
+    const tb = $('#results tbody');
+    tb.innerHTML = '';
+    const rows = sortedAgents();
+    $('#results-empty').hidden = rows.length > 0;
+    const t = state.test;
+    rows.forEach((r, i) => {
+      const p = r.latest || {};
+      const el = p.elapsed_s || elapsedOf(t);
+      const avg = r.done ? p.mbps : (el ? (p.bytes || 0) * 8 / 1e6 / el : 0);
+      const stateText = r.done ? 'done' : (p.ts ? 'running' : 'waiting');
+      const tr = document.createElement('tr');
+      tr.className = 'clickable' + (state.view === r.agent_id ? ' selected' : '');
+      tr.innerHTML =
+        '<td><span class="swatch" style="background:' + agentColor(i) + '"></span>' + esc(r.name) + '</td>' +
+        '<td class="num">' + fmt(r.done ? 0 : p.mbps, 1) + '</td>' +
+        '<td class="num">' + fmt(avg, 1) + '</td>' +
+        '<td class="num">' + fmt(r.done ? 0 : p.interval_requests, 1) + '</td>' +
+        '<td class="num">' + fmt(p.requests) + '</td>' +
+        '<td class="num">' + fmt((p.bytes || 0) / 1e6, 1) + '</td>' +
+        '<td class="num' + (p.errors ? ' bad' : '') + '">' + fmt(p.errors) + '</td>' +
+        '<td class="num">' + fmt(p.p50_ms) + '</td>' +
+        '<td class="num">' + fmt(p.p95_ms) + '</td>' +
+        '<td class="num">' + fmt(r.done ? 0 : p.active_workers) + '</td>' +
+        '<td class="num" title="' + esc(wifiText(r.wifi)) + '">' + (r.wifi && r.wifi.signal_dbm ? r.wifi.signal_dbm + ' dBm' : '') + '</td>' +
+        '<td class="num">' + (r.wifi && r.wifi.tx_mbps ? fmt(r.wifi.tx_mbps) : '') + '</td>' +
+        '<td class="muted">' + stateText + '</td>' +
+        '<td><button type="button" class="small">view errors (' + (t.agent_errors[r.agent_id] || []).length + ')</button></td>';
+      tr.addEventListener('click', () => { state.view = state.view === r.agent_id ? 'all' : r.agent_id; render(); });
+      tr.querySelector('button').addEventListener('click', (e) => { e.stopPropagation(); openErrors(r.agent_id); });
+      tb.appendChild(tr);
+    });
+  }
+
+  // ---- chart ----
+  function fmtAxis(v) {
+    if (v >= 100) return v.toFixed(0);
+    if (v >= 10) return v.toFixed(1);
+    return v.toFixed(2).replace(/\.?0+$/, '');
+  }
+  function fmtTime(s) {
+    s = Math.max(0, Math.round(s));
+    const m = Math.floor(s / 60), r = s % 60;
+    return m ? m + ':' + String(r).padStart(2, '0') : r + 's';
+  }
+  function rgba(hex, a) {
+    const n = parseInt(hex.slice(1), 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+  }
+
+  function drawChart(canvas, label, series, t0, t1, unit, zeroBased = true) {
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const padL = 58, padR = 14, padT = 26, padB = 24;
+    ctx.clearRect(0, 0, W, H);
+    ctx.font = '12px system-ui, sans-serif';
+    ctx.fillStyle = '#8b9bb0';
+    ctx.textAlign = 'left';
+    ctx.fillText(label, padL, 15);
+
+    let lx = W - padR;
+    ctx.textAlign = 'right';
+    for (let i = series.length - 1; i >= 0; i--) {
+      const s = series[i];
+      if (!s.name) continue;
+      const w = ctx.measureText(s.name).width;
+      ctx.fillStyle = '#8b9bb0';
+      ctx.fillText(s.name, lx, 15);
+      lx -= w + 5;
+      ctx.fillStyle = s.color;
+      ctx.fillRect(lx - 9, 8, 9, 9);
+      lx -= 16;
+    }
+
+    let max = -Infinity, min = Infinity;
+    for (const s of series) for (const p of s.pts) { if (p[1] > max) max = p[1]; if (p[1] < min) min = p[1]; }
+    let lo, hi;
+    if (zeroBased) {
+      lo = 0;
+      hi = max > 0 ? max * 1.15 : 1;
+    } else if (max === -Infinity) {
+      lo = -100; hi = -30;
+    } else {
+      lo = Math.floor(min - 5);
+      hi = Math.ceil(max + 5);
+      if (hi <= lo) hi = lo + 1;
+    }
+    const span = Math.max(t1 - t0, 10000);
+    const x = (ts) => padL + (W - padL - padR) * Math.min(1, Math.max(0, (ts - t0) / span));
+    const y = (v) => padT + (H - padT - padB) * (1 - (Math.min(Math.max(v || 0, lo), hi) - lo) / (hi - lo));
+
+    ctx.strokeStyle = '#263040';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#8b9bb0';
+    ctx.textAlign = 'right';
+    for (let i = 0; i <= 4; i++) {
+      const yy = padT + (H - padT - padB) * i / 4;
+      ctx.beginPath(); ctx.moveTo(padL, yy); ctx.lineTo(W - padR, yy); ctx.stroke();
+      ctx.fillText(fmtAxis(hi - (hi - lo) * i / 4), padL - 8, yy + 4);
+    }
+    ctx.textAlign = 'center';
+    if (t0) for (let i = 0; i <= 6; i++) {
+      const ts = t0 + span * i / 6;
+      ctx.fillText(fmtTime((ts - t0) / 1000), x(ts), H - 7);
+    }
+
+    let drew = false;
+    for (const s of series) {
+      if (s.pts.length < 2) continue;
+      drew = true;
+      ctx.beginPath();
+      s.pts.forEach((p, i) => { const px = x(p[0]), py = y(p[1]); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); });
+      ctx.strokeStyle = s.color;
+      ctx.lineWidth = s.width || 2;
+      ctx.stroke();
+      if (s.fill && zeroBased) {
+        ctx.lineTo(x(s.pts[s.pts.length - 1][0]), y(0));
+        ctx.lineTo(x(s.pts[0][0]), y(0));
+        ctx.closePath();
+        ctx.fillStyle = rgba(s.color, 0.12);
+        ctx.fill();
+      }
+    }
+    if (!drew) {
+      ctx.fillStyle = '#8b9bb0';
+      ctx.textAlign = 'center';
+      ctx.fillText(label ? 'waiting for data' : 'no test yet', (padL + W - padR) / 2, (padT + H - padB) / 2 + 4);
+    }
+
+    // Remember what was drawn so hover can hit-test it, then draw the
+    // hover marker if the mouse is over a point.
+    canvas._chart = { label, series, t0, t1, span, unit, zeroBased, padL, padR, x, y };
+    const hover = drew ? canvas._hover : null;
+    if (hover && hover.length) {
+      const hx = x(hover[0].p[0]);
+      ctx.strokeStyle = '#8b9bb0';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(hx, padT); ctx.lineTo(hx, H - padB); ctx.stroke();
+      ctx.setLineDash([]);
+      for (const { s, p } of hover) {
+        ctx.beginPath();
+        ctx.arc(x(p[0]), y(p[1]), 4.5, 0, Math.PI * 2);
+        ctx.fillStyle = s.color;
+        ctx.fill();
+        ctx.strokeStyle = '#0f1419';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+      showTip(canvas);
+    }
+  }
+
+  // ---- hover readout ----
+  const tip = $('#tip');
+
+  function fmtValue(v, unit) {
+    if (unit === 'ms') return fmt(v) + ' ms';
+    if (unit === 'dBm') return fmt(v) + ' dBm';
+    if (unit === '/s') return fmt(v, 2) + '/s';
+    return fmt(v, 1) + ' ' + unit;
+  }
+
+  // nearest returns the point whose timestamp is closest to ts; pts is
+  // sorted by timestamp.
+  function nearest(pts, ts) {
+    if (!pts.length) return null;
+    let lo = 0, hi = pts.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (pts[mid][0] < ts) lo = mid + 1; else hi = mid;
+    }
+    let best = pts[lo];
+    if (lo > 0 && Math.abs(pts[lo - 1][0] - ts) < Math.abs(best[0] - ts)) best = pts[lo - 1];
+    return best;
+  }
+
+  function chartHover(canvas, e) {
+    const c = canvas._chart;
+    if (!c || !c.series.some((s) => s.pts.length >= 2)) return hideHover(canvas);
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * canvas.width / rect.width;
+    if (mx < c.padL || mx > canvas.width - c.padR) return hideHover(canvas);
+    const ts = c.t0 + (mx - c.padL) / (canvas.width - c.padL - c.padR) * c.span;
+    // Snap to the nearest point of each series while the pointer is over
+    // its data; points are a second apart so a distance cutoff would leave
+    // gaps between them.
+    const hits = [];
+    for (const s of c.series) {
+      if (s.pts.length < 2) continue;
+      const first = c.x(s.pts[0][0]), last = c.x(s.pts[s.pts.length - 1][0]);
+      if (mx < first - 20 || mx > last + 20) continue;
+      const p = nearest(s.pts, ts);
+      if (p) hits.push({ s, p });
+    }
+    if (!hits.length) return hideHover(canvas);
+    canvas._hover = hits;
+    canvas._mouse = { x: e.clientX, y: e.clientY };
+    drawChart(canvas, c.label, c.series, c.t0, c.t1, c.unit, c.zeroBased);
+  }
+
+  function showTip(canvas) {
+    const c = canvas._chart, hits = canvas._hover, m = canvas._mouse;
+    if (!c || !hits || !hits.length || !m) return;
+    tip.innerHTML =
+      '<div class="muted">' + fmtTime((hits[0].p[0] - c.t0) / 1000) + ' into the test</div>' +
+      hits.map(({ s, p }) =>
+        '<div><span class="swatch" style="background:' + s.color + '"></span>' + esc(s.name) + ': <b>' + fmtValue(p[1], c.unit) + '</b></div>').join('');
+    tip.hidden = false;
+    const pad = 14;
+    let left = m.x + pad, top = m.y + pad;
+    if (left + tip.offsetWidth > window.innerWidth - 8) left = m.x - tip.offsetWidth - pad;
+    if (top + tip.offsetHeight > window.innerHeight - 8) top = m.y - tip.offsetHeight - pad;
+    tip.style.left = left + 'px';
+    tip.style.top = top + 'px';
+  }
+
+  function hideHover(canvas) {
+    tip.hidden = true;
+    if (canvas._hover) {
+      canvas._hover = null;
+      canvas._mouse = null;
+      const c = canvas._chart;
+      if (c) drawChart(canvas, c.label, c.series, c.t0, c.t1, c.unit, c.zeroBased);
+    }
+  }
+
+  for (const id of ['c-mbps', 'c-req', 'c-lat', 'c-err', 'c-sig', 'c-rate']) {
+    const cv = $('#' + id);
+    cv.addEventListener('mousemove', (e) => chartHover(cv, e));
+    cv.addEventListener('mouseleave', () => hideHover(cv));
+  }
+
+  // ---- form ----
+  async function api(method, path, body) {
+    const res = await fetch(path, {
+      method,
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || (res.status + ' ' + res.statusText));
+    return data;
+  }
+
+  $('#url-list').addEventListener('change', (e) => {
+    const f = $('#test-form');
+    const p = PRESETS[e.target.value] || PRESETS.browse;
+    for (const k of Object.keys(p)) f[k].value = p[k];
+  });
+
+  // The list menu comes from the server so edited and custom lists show up.
+  const LIST_LABELS = { browse: 'Browse: popular sites', download: 'Download: test files, worldwide', max: 'Max throughput: nearby 100 MB files' };
+  async function loadListOptions() {
+    let lists;
+    try { lists = await api('GET', '/api/lists'); } catch { return; }
+    const sel = $('#url-list');
+    const keep = sel.value;
+    sel.innerHTML = '';
+    for (const li of lists) {
+      const o = document.createElement('option');
+      o.value = li.name;
+      o.textContent = (LIST_LABELS[li.name] || li.name) + ' (' + li.count + (li.modified ? ', edited' : '') + ')';
+      sel.appendChild(o);
+    }
+    const mixed = document.createElement('option');
+    mixed.value = 'mixed';
+    mixed.textContent = 'Mixed: browse + download';
+    sel.appendChild(mixed);
+    if ([...sel.options].some((o) => o.value === keep)) sel.value = keep;
+  }
+  loadListOptions();
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) loadListOptions(); });
+
+  $('#test-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const body = { mode: 'get', url_list: f.get('url_list'), agent_ids: [...state.selected] };
+    for (const k of ['threads', 'duration_s', 'think_min_ms', 'think_max_ms', 'timeout_ms']) body[k] = Number(f.get(k));
+    $('#form-msg').textContent = 'Starting';
+    try {
+      const t = await api('POST', '/api/tests', body);
+      $('#form-msg').textContent = 'Started test ' + t.id + ' on ' + Object.keys(t.agents).length + ' agent(s).';
+      state.view = 'all';
+      setTest(t);
+    } catch (err) {
+      $('#form-msg').innerHTML = '<span class="bad">' + esc(err.message) + '</span>';
+    }
+  });
+
+  $('#stop').addEventListener('click', async () => {
+    if (!state.test) return;
+    try {
+      await api('POST', '/api/tests/' + state.test.id + '/stop');
+      $('#form-msg').textContent = 'Stop sent; waiting for agents to report.';
+    } catch (err) {
+      $('#form-msg').innerHTML = '<span class="bad">' + esc(err.message) + '</span>';
+    }
+  });
+
+  // ---- live events ----
+  function connect() {
+    const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/api/events');
+    ws.onopen = () => { $('#conn').textContent = 'connected'; };
+    ws.onclose = () => { $('#conn').textContent = 'disconnected, retrying'; setTimeout(connect, 2000); };
+    ws.onmessage = (ev) => {
+      let m;
+      try { m = JSON.parse(ev.data); } catch { return; }
+      const d = m.data;
+      const t = state.test;
+      switch (m.type) {
+        case 'snapshot':
+          state.agents = d.agents || [];
+          renderAgents();
+          setTest(d.test);
+          break;
+        case 'agents':
+          state.agents = d || [];
+          renderAgents();
+          break;
+        case 'test':
+          setTest(d);
+          break;
+        case 'tick':
+          if (t && d.test_id === t.id) {
+            t.history.push(d.tick);
+            t.totals = d.tick;
+            render();
+          }
+          break;
+        case 'progress':
+          if (t && d.test_id === t.id) {
+            const p = d.result.latest;
+            if (p && p.new_errors && p.new_errors.length) {
+              const log = t.agent_errors[d.agent_id] = t.agent_errors[d.agent_id] || [];
+              log.push(...p.new_errors);
+              if (log.length > 2000) log.splice(0, log.length - 2000);
+              p.new_errors = undefined;
+            }
+            t.agents[d.agent_id] = d.result;
+            if (p && p.ts && !d.result.done) {
+              const ah = t.agent_history[d.agent_id] = t.agent_history[d.agent_id] || [];
+              if (!ah.length || p.ts > ah[ah.length - 1].ts) ah.push(p);
+            }
+            render();
+          }
+          break;
+      }
+    };
+  }
+
+  setInterval(() => { if (running()) render(); if (state.agents.length) renderAgents(); }, 5000);
+  setInterval(() => { if (running()) renderStats(); }, 1000);
+  connect();
+  render();
+})();
+</script>
+</body>
+</html>

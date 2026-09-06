@@ -1,0 +1,73 @@
+# Download list: large synthetic test files published by hosting providers and
+# CDNs for bandwidth testing. They contain filler bytes, not software, and the
+# agent streams them to a discard sink; nothing is ever written to disk or run.
+# Every URL here returned HTTP 200 with a binary content type and the expected
+# Content-Length via cmd/urlcheck on 2026-09-05. Sizes are 10 MB to 100 MB.
+# Plain http:// entries are kept on purpose so tests carry some unencrypted
+# traffic too. Re-check with:
+#   go run ./cmd/urlcheck -file internal/server/data/download_urls.txt -max-bytes 2000000 -all
+
+# Cloudflare speed test, random data, size in the query string
+https://speed.cloudflare.com/__down?bytes=10000000
+https://speed.cloudflare.com/__down?bytes=25000000
+https://speed.cloudflare.com/__down?bytes=50000000
+https://speed.cloudflare.com/__down?bytes=75000000
+
+# ThinkBroadband (UK)
+http://ipv4.download.thinkbroadband.com/10MB.zip
+http://ipv4.download.thinkbroadband.com/50MB.zip
+http://ipv4.download.thinkbroadband.com/100MB.zip
+https://download.thinkbroadband.com/10MB.zip
+https://download.thinkbroadband.com/100MB.zip
+
+# Hetzner, 100 MB
+https://hil-speed.hetzner.com/100MB.bin
+https://fsn1-speed.hetzner.com/100MB.bin
+https://nbg1-speed.hetzner.com/100MB.bin
+https://hel1-speed.hetzner.com/100MB.bin
+https://sin-speed.hetzner.com/100MB.bin
+
+# OVH
+https://proof.ovh.net/files/10Mb.dat
+https://proof.ovh.net/files/100Mb.dat
+
+# Tele2, plain HTTP
+http://speedtest.tele2.net/10MB.zip
+http://speedtest.tele2.net/100MB.zip
+
+# Vultr, 100 MB, US regions then overseas
+https://nj-us-ping.vultr.com/vultr.com.100MB.bin
+https://il-us-ping.vultr.com/vultr.com.100MB.bin
+https://tx-us-ping.vultr.com/vultr.com.100MB.bin
+https://ga-us-ping.vultr.com/vultr.com.100MB.bin
+https://fl-us-ping.vultr.com/vultr.com.100MB.bin
+https://wa-us-ping.vultr.com/vultr.com.100MB.bin
+https://sjo-ca-us-ping.vultr.com/vultr.com.100MB.bin
+https://lax-ca-us-ping.vultr.com/vultr.com.100MB.bin
+https://lon-gb-ping.vultr.com/vultr.com.100MB.bin
+https://fra-de-ping.vultr.com/vultr.com.100MB.bin
+https://hnd-jp-ping.vultr.com/vultr.com.100MB.bin
+
+# Linode / Akamai, 100 MB, US regions then overseas
+https://speedtest.newark.linode.com/100MB-newark.bin
+http://speedtest.newark.linode.com/100MB-newark.bin
+https://speedtest.atlanta.linode.com/100MB-atlanta.bin
+https://speedtest.dallas.linode.com/100MB-dallas.bin
+https://speedtest.fremont.linode.com/100MB-fremont.bin
+https://speedtest.toronto1.linode.com/100MB-toronto1.bin
+https://speedtest.london.linode.com/100MB-london.bin
+https://speedtest.frankfurt.linode.com/100MB-frankfurt.bin
+https://speedtest.singapore.linode.com/100MB-singapore.bin
+https://speedtest.tokyo2.linode.com/100MB-tokyo2.bin
+https://speedtest.mumbai1.linode.com/100MB-mumbai1.bin
+https://speedtest.sydney.linode.com/100MB-sydney.bin
+
+# CacheFly CDN
+https://cachefly.cachefly.net/10mb.test
+https://cachefly.cachefly.net/100mb.test
+
+# Scaleway (testdebit.info), 100 MB
+https://ipv4.scaleway.testdebit.info/100M.iso
+
+# WTNet, 100 MB
+https://speedtest.wtnet.de/files/100mb.bin
