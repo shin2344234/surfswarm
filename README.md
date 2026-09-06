@@ -250,7 +250,7 @@ Done:
 - Cross-compile script for Linux, macOS, and Windows.
 - Agent installs itself as a launchd daemon, systemd unit, or Windows service, with an install script for macOS and Linux.
 - Three verified URL lists (browse, download, max throughput), an editor for them with custom lists, and the urlcheck tool.
-- Per-device views with six live charts, hover readouts, per-request error logs, and richer per-second aggregates.
+- Per-device views with six live charts, hover readouts, per-request error logs, and richer aggregates twice a second.
 - Wi-Fi telemetry from every agent, with roam and dropout events during a test.
 - Tests keep running through a lost control connection; reports are queued and flushed on reconnect.
 - UI password, Docker image and compose demo, unit tests.
