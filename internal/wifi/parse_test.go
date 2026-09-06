@@ -182,6 +182,17 @@ func TestParseSystemProfiler(t *testing.T) {
 	}
 }
 
+func TestParseIpconfigSummary(t *testing.T) {
+	ssid, bssid := ParseIpconfigSummary("  BSSID : <redacted>\n  InterfaceType : WiFi\n  SSID : <redacted>\n")
+	if ssid != "" || bssid != "" {
+		t.Fatalf("redacted: %q %q", ssid, bssid)
+	}
+	ssid, bssid = ParseIpconfigSummary("  BSSID : 04:D4:C4:12:34:56\n  SSID : LabNet\n  Security : WPA3_SAE\n")
+	if ssid != "LabNet" || bssid != "04:d4:c4:12:34:56" {
+		t.Fatalf("visible: %q %q", ssid, bssid)
+	}
+}
+
 func TestChannelHelpers(t *testing.T) {
 	cases := []struct {
 		freq    int

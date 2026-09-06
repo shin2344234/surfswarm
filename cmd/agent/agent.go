@@ -84,11 +84,16 @@ func (a *agent) runForever(ctx context.Context) {
 	}
 }
 
-// pollWifi refreshes the wireless link reading every few seconds.
+// pollWifi refreshes the wireless link reading every few seconds. When the
+// platform tool is slow (system_profiler on macOS can take several
+// seconds), the interval stretches so the agent is not running it
+// back to back.
 func (a *agent) pollWifi(ctx context.Context) {
 	warned := false
 	for {
+		start := time.Now()
 		w, err := wifi.Current()
+		took := time.Since(start)
 		if err != nil && !warned {
 			log.Printf("wi-fi telemetry unavailable: %v", err)
 			warned = true
@@ -96,10 +101,17 @@ func (a *agent) pollWifi(ctx context.Context) {
 		a.wifiMu.Lock()
 		a.wifi = w
 		a.wifiMu.Unlock()
+		wait := 5 * time.Second
+		if took > time.Second {
+			wait = 4 * took
+			if wait > time.Minute {
+				wait = time.Minute
+			}
+		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(5 * time.Second):
+		case <-time.After(wait):
 		}
 	}
 }

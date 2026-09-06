@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"github.com/kardianos/service"
+
+	"surfswarm/internal/wifi"
 )
 
 var version = "dev"
@@ -109,6 +111,8 @@ func main() {
 		fmt.Printf("%s: ok\n", cmd)
 	case "status":
 		status()
+	case "wifi":
+		printWifi()
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command %q\n\n", cmd)
 		usage(fs)
@@ -135,10 +139,29 @@ Usage:
                                        re-running install upgrades an existing install
   surfswarm-agent uninstall            stop and remove the service; config and binary are kept
   surfswarm-agent start|stop|restart|status
+  surfswarm-agent wifi                 print the Wi-Fi link this device would report, and how long
+                                       the reading took (run with sudo on macOS to see the SSID)
 
 Flags:
 `, version)
 	fs.PrintDefaults()
+}
+
+// printWifi shows the telemetry reading for support and debugging.
+func printWifi() {
+	start := time.Now()
+	w, err := wifi.Current()
+	took := time.Since(start).Round(time.Millisecond)
+	if err != nil {
+		fmt.Printf("error after %s: %v\n", took, err)
+		os.Exit(1)
+	}
+	if w == nil {
+		fmt.Printf("no wireless link (wired, Wi-Fi off, or not associated); read took %s\n", took)
+		return
+	}
+	b, _ := json.MarshalIndent(w, "", "  ")
+	fmt.Printf("%s\nread took %s\n", b, took)
 }
 
 // ---- service lifecycle ----

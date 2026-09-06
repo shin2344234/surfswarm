@@ -21,9 +21,10 @@ func Current() (*protocol.WifiInfo, error) {
 	return current()
 }
 
-// run executes a command with a short timeout and returns its stdout.
+// run executes a command and returns its stdout. The timeout is generous
+// because system_profiler on macOS can take close to ten seconds.
 func run(name string, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, name, args...).Output()
 	return string(out), err

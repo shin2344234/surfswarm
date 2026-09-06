@@ -247,6 +247,24 @@ func parseMacChannel(val string, info *protocol.WifiInfo) {
 	}
 }
 
+// ParseIpconfigSummary picks the SSID and BSSID out of "ipconfig getsummary
+// <if>" (macOS). Either comes back empty when redacted.
+func ParseIpconfigSummary(out string) (ssid, bssid string) {
+	for _, raw := range strings.Split(out, "\n") {
+		key, val, ok := kv(raw)
+		if !ok || val == "" || val == "<redacted>" {
+			continue
+		}
+		switch key {
+		case "SSID":
+			ssid = val
+		case "BSSID":
+			bssid = strings.ToLower(val)
+		}
+	}
+	return ssid, bssid
+}
+
 // ParseSystemProfiler reads the current network from
 // "system_profiler SPAirPortDataType -json" (macOS, any user; SSID and BSSID
 // are redacted without location access, the rest is present).
