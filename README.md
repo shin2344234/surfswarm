@@ -2,9 +2,9 @@
 
 Generate realistic web traffic from many small clients at once, so you can load a wireless access point the way a room full of people would and watch what it does.
 
-A server shows every connected agent, lets you pick some or all of them, and starts a test: each agent runs N workers that fetch random sites from a list, pause, and fetch again. Throughput, request counts, errors, and latency stream back to the server once a second.
+A server shows every connected agent, lets you pick some or all of them, and starts a test: each agent runs N workers that fetch random sites from a list, pause, and fetch again. Throughput, request counts, errors, and latency stream back to the server twice a second.
 
-Agents install as a boot-time service on Raspberry Pi and other Linux, macOS, and Windows, report the Wi-Fi link they are on, and keep a test running even if they lose the server mid-run. The server is a single binary with the web UI built in, or a Docker image. See Status at the end for what is done and what is planned.
+Agents install as a boot-time service on Raspberry Pi and other Linux, macOS, and Windows. They report the Wi-Fi link they are on and keep a test running even if they lose the server mid-run. The server is a single binary with the web UI built in, or a Docker image. See Status at the end for what is done and what is planned.
 
 ## Screenshots
 
@@ -16,7 +16,7 @@ Agents install as a boot-time service on Raspberry Pi and other Linux, macOS, an
 
 ## Build
 
-Requires Go 1.22 or newer.
+Requires Go 1.25 or newer.
 
 ```
 go build ./cmd/server
@@ -25,7 +25,7 @@ go build ./cmd/agent
 
 `./build.sh` cross-compiles both for Linux (amd64, arm64, armv7 for 32-bit Raspberry Pi OS), macOS (Intel and Apple Silicon), and Windows into `dist/`. No cgo, so every binary is static.
 
-`go test ./...` runs the unit tests: protocol framing, error classification and the traffic engine against a local HTTP server, the Wi-Fi parsers against captured tool output, the list store, the per-second aggregation, and the UI password.
+`go test ./...` runs the unit tests: protocol framing, error classification and the traffic engine against a local HTTP server, the Wi-Fi parsers against captured tool output, the list store, the aggregation math, and the UI password.
 
 Binaries from the script carry a version like `0.1.0+20260905-205800`, the build time in UTC, plus the short git commit once the tree is under git. `surfswarm-agent -version` prints it, the agent logs it at startup, and the server shows it in the Version column of the agents table, so you can tell whether a device is running the build you just installed. Plain `go build` produces version `dev`.
 
@@ -98,7 +98,7 @@ The second command should print nothing once the flag is gone. Or, after the dia
 
 Binaries copied with scp or curl don't carry the flag. The install command copies the binary to /usr/local/bin, and that copy is clean, so the daemon itself never trips Gatekeeper. Signed and notarized builds need an Apple Developer account and are on the roadmap.
 
-The daemon runs as root. That is deliberate: reading Wi-Fi details such as SSID, BSSID, and signal on current macOS needs root, and that telemetry is on the roadmap.
+The daemon runs as root. That is deliberate: reading Wi-Fi details such as signal, channel, and rate on current macOS needs root, and that is where the Wi-Fi column comes from.
 
 ### Linux, including Raspberry Pi
 
@@ -150,7 +150,7 @@ Other endpoints:
 ```
 GET  /api/agents            every agent seen since the server started
 GET  /api/tests             every test since the server started
-GET  /api/tests/{id}        one test with per-agent results and per-second history
+GET  /api/tests/{id}        one test with per-agent results and the report history
 GET  /api/tests/{id}/errors failed requests per agent (add ?agent=ID for one device)
 POST /api/tests/{id}/stop   stop early
 GET  /api/urls              every URL list's URLs, keyed by name
@@ -199,10 +199,11 @@ It prints a summary line and one line per failing URL with the class, status, ti
 
 ## Steady load
 
-The default shape is a closed loop: each thread fetches, pauses for a random think time, and fetches again. That is how people browse, and the aggregate is bursty by construction. Two fields on the form change the shape when you want a flat line:
+The default shape is a closed loop: each thread fetches, pauses for a random think time, and fetches again. That is how people browse, and the aggregate is bursty by construction. Two fields on the form change the shape when you want a flat line.
 
-- **Target Mbps per agent** paces every download with a token bucket, so with the download or max list each agent streams at that rate no matter how fast the link is. Sixteen agents at 20 Mbps is a steady 320 Mbps through the access point, the way sixteen video streams would be. This is the setting for "can this AP hold N clients at X Mbps each".
-- **Requests/s per agent** starts a request on a fixed cadence (open loop) instead of waiting on think time, using up to the thread count at once. If every thread is busy when a slot comes due, the slot is skipped and counted, which tells you the device could not keep up with the rate you asked for.
+Target Mbps per agent paces every download with a token bucket, so with the download or max list each agent streams at that rate no matter how fast the link is. Sixteen agents at 20 Mbps is a steady 320 Mbps through the access point, the way sixteen video streams would be. This is the setting for "can this AP hold N clients at X Mbps each".
+
+Requests/s per agent starts a request on a fixed cadence (open loop) instead of waiting on think time, using up to the thread count at once. If every thread is busy when a slot comes due, the slot is skipped and counted, which tells you the device could not keep up with the rate you asked for.
 
 Both can be combined. Worker starts are also staggered so a closed-loop test does not fire all its threads in lockstep, and the smooth checkbox above the charts applies a three-second moving average when you would rather read the trend than the half-second detail.
 
@@ -245,7 +246,7 @@ JSON frames over one websocket per agent. Every frame is `{"type": "...", "data"
 Done:
 
 - Agent: connect, hello, heartbeat, reconnect with backoff, persistent id, get mode traffic engine with per-request timing and error classes.
-- Server: agent hub, one test at a time, per-second aggregation, REST API, live websocket events, embedded UI with a throughput chart and per-agent table.
+- Server: agent hub, one test at a time, aggregation twice a second, REST API, live websocket events, embedded UI with a throughput chart and per-agent table.
 - Cross-compile script for Linux, macOS, and Windows.
 - Agent installs itself as a launchd daemon, systemd unit, or Windows service, with an install script for macOS and Linux.
 - Three verified URL lists (browse, download, max throughput), an editor for them with custom lists, and the urlcheck tool.

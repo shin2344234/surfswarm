@@ -316,7 +316,7 @@
       '<td class="num">' + fmt(r.ms) + '</td>' +
       '<td class="num">' + (r.length > 0 ? fmt(r.length / 1e6, 1) + ' MB' : '') + '</td>' +
       '<td class="nowrap muted">' + esc((r.type || '').split(';')[0]) + '</td>' +
-      '<td class="mono">' + esc(r.url) + (r.final_url && r.final_url !== r.url ? '<br><span class="muted">→ ' + esc(r.final_url) + '</span>' : '') + '</td>' +
+      '<td class="mono">' + esc(r.url) + (r.final_url && r.final_url !== r.url ? '<br><span class="muted">redirected to ' + esc(r.final_url) + '</span>' : '') + '</td>' +
       '<td class="mono">' + esc(r.message || '') + '</td></tr>').join('');
     const failing = (j.results || []).filter((r) => r.class).length;
     $('#remove-failing').disabled = !j.done || !failing;

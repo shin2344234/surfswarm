@@ -23,7 +23,7 @@ func main() {
 	conc := flag.Int("concurrency", 8, "parallel fetches")
 	timeout := flag.Duration("timeout", 15*time.Second, "per-request timeout")
 	maxBytes := flag.Int64("max-bytes", 0, "stop reading a body after this many bytes (0 = read it all); useful for download lists")
-	all := flag.Bool("all", false, "print every URL, not only the failures")
+	all := flag.Bool("all", false, "print every URL, passing ones included")
 	emitOK := flag.String("emit-ok", "", "write the URLs that passed to this file, one per line, in input order")
 	flag.Parse()
 
