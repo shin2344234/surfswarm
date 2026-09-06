@@ -222,9 +222,10 @@ func serviceConfig(args []string) *service.Config {
 
 func runAgent(cfg config) {
 	if runtime.GOOS == "windows" && !service.Interactive() {
-		// A Windows service has no stderr anyone can see.
+		// A Windows service has no usable stderr, and a combined writer
+		// would stop at the failed stderr write, so log to the file only.
 		if f, err := openLogFile(cfg.StateDir); err == nil {
-			log.SetOutput(io.MultiWriter(os.Stderr, f))
+			log.SetOutput(f)
 		}
 	}
 	s, err := service.New(&program{cfg: cfg}, serviceConfig(nil))
