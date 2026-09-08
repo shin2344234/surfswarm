@@ -263,3 +263,7 @@ Not yet:
 - TLS on the server itself; put it behind a reverse proxy for now.
 - Packages (.deb, .rpm) and signed macOS builds.
 - Results history page, export, side-by-side comparison of two tests.
+
+## Buy me a coffee
+
+[buymeacoffee.com/sethwalker234](https://buymeacoffee.com/sethwalker234) if you want to.
